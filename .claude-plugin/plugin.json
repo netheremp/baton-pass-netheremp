@@ -1,0 +1,30 @@
+{
+  "name": "baton-pass-netheremp",
+  "version": "0.6.9",
+  "description": "Low-token handoff workflow for multi-agent repos, with Claude Code skills and slash commands for continuity, transfer, receive, ownership checks, and handoff audits. Derived from francisN21/baton-pass (MIT).",
+  "author": {
+    "name": "netheremp"
+  },
+  "homepage": "https://github.com/netheremp/baton-pass-netheremp",
+  "repository": "https://github.com/netheremp/baton-pass-netheremp",
+  "license": "MIT",
+  "keywords": [
+    "claude-code",
+    "skills",
+    "handoff",
+    "multi-agent",
+    "continuity"
+  ],
+  "commands": [
+    "./commands/new-game.md",
+    "./commands/save-state.md",
+    "./commands/baton-pass.md",
+    "./commands/foresight.md",
+    "./commands/dragon-dance.md",
+    "./commands/party-check.md",
+    "./commands/hindsight.md"
+  ],
+  "skills": [
+    "./skills/baton-pass"
+  ]
+}

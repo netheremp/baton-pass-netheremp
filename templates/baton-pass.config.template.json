@@ -1,0 +1,25 @@
+{
+  "version": "0.1.0",
+  "triggers": {
+    "initialize": "new-game",
+    "pause": "save-state",
+    "transfer": "baton-pass",
+    "receive": "foresight",
+    "improvement": "dragon-dance",
+    "status": "party-check"
+  },
+  "paths": {
+    "handoff": "docs/agent-handoff.md",
+    "currentState": "docs/current-state.md",
+    "nextTask": "docs/next-task.md",
+    "progressLog": "docs/progress.md",
+    "stateFile": "baton-pass.state.json"
+  },
+  "rules": {
+    "lowTokenFirst": true,
+    "appendOnlyProgress": true,
+    "singlePrimaryNextTask": true,
+    "requireForesightOnReceive": true,
+    "requireDragonDanceOnIssueOnly": true
+  }
+}

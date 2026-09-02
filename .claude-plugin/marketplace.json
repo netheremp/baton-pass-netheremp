@@ -1,0 +1,30 @@
+{
+  "name": "baton-pass-netheremp",
+  "owner": {
+    "name": "netheremp"
+  },
+  "description": "Claude Code plugin marketplace for baton-pass-netheremp, a low-token multi-agent handoff workflow. Derived from francisN21/baton-pass (MIT).",
+  "version": "0.6.9",
+  "plugins": [
+    {
+      "name": "baton-pass-netheremp",
+      "source": "./",
+      "description": "Adds the Baton Pass skill and slash commands for save-state, baton-pass, foresight, party-check, hindsight, and workflow lessons. Derived from francisN21/baton-pass (MIT).",
+      "version": "0.6.9",
+      "author": {
+        "name": "netheremp"
+      },
+      "homepage": "https://github.com/netheremp/baton-pass-netheremp",
+      "repository": "https://github.com/netheremp/baton-pass-netheremp",
+      "license": "MIT",
+      "category": "productivity",
+      "keywords": [
+        "claude-code",
+        "skills",
+        "handoff",
+        "multi-agent",
+        "continuity"
+      ]
+    }
+  ]
+}
