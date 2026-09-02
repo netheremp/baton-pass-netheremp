@@ -1,3 +1,8 @@
+---
+description: Audit the full baton chain — claims, verifications, risks, open items
+argument-hint: "[scope]"
+---
+
 Run the baton-pass `hindsight` move.
 
 Audit the full chain of baton passes — what was claimed, what was verified,

@@ -1,3 +1,7 @@
+---
+description: Show current work-ownership state quickly, no full audit
+---
+
 Run the baton-pass `party-check` move.
 
 Show the current ownership state quickly. No full audit needed.

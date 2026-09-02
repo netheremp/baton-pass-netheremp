@@ -1,3 +1,8 @@
+---
+description: Bootstrap baton-pass shared memory and state files for multi-agent work
+argument-hint: "[--force]"
+---
+
 Run the baton-pass `new-game` move.
 
 Bootstrap the minimum shared memory and state files so multi-agent work can begin safely.

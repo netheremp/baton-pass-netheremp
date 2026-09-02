@@ -1,3 +1,7 @@
+---
+description: Verify alignment between the written state and the actual repo before acting
+---
+
 Run the baton-pass `foresight` move.
 
 Verify alignment between the written state and the actual repo before touching anything.

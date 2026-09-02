@@ -1,3 +1,7 @@
+---
+description: Write a minimal checkpoint so this agent can safely pause and resume
+---
+
 Run the baton-pass `save-state` move.
 
 Write a minimal checkpoint so this agent can safely pause and resume later.

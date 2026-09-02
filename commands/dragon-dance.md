@@ -1,3 +1,7 @@
+---
+description: Record a real, reusable workflow lesson so future agents don't repeat it
+---
+
 Run the baton-pass `dragon-dance` move.
 
 Record a real workflow lesson so future agents do not repeat the same mistake.

@@ -1,3 +1,8 @@
+---
+description: Hand off to the next agent — write a transfer package so work continues where it stopped
+argument-hint: "[next-agent]"
+---
+
 Run the baton-pass `baton-pass` move.
 
 Write a transfer package so the next agent can pick up exactly where this one left off.
