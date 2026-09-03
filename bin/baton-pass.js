@@ -99,7 +99,12 @@ function linkDir(src, dest, force) {
       console.log(`  skip   ${dest} (exists; pass --force to replace)`)
       return
     }
-    fs.rmSync(dest, { recursive: true, force: true })
+    if (!isLink) {
+      // Never recursively delete a real directory. Ask the user to move it aside.
+      console.log(`  skip   ${dest} (real directory, not a link — move it aside to use --link)`)
+      return
+    }
+    fs.unlinkSync(dest) // swap one symlink for another
   }
   fs.symlinkSync(src, dest, 'dir')
   console.log(`  link   ${dest} -> ${src}`)

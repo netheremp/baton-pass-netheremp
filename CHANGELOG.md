@@ -21,7 +21,8 @@ Forked from [francisN21/baton-pass](https://github.com/francisN21/baton-pass) @ 
   puts the `baton-pass` skill into `~/.claude` and every `~/.codex*` home in one step.
   Auto-detects targets; `--claude` / `--codex` / `--claude-home` / `--codex-home` scope it,
   `--link` symlinks the skill dir (so `git pull` updates every surface), `--skill-only` skips
-  the slash commands / app prompts, `--force` overwrites.
+  the slash commands / app prompts, `--force` overwrites. The installer only ever copies files
+  or replaces its own symlink — it never recursively deletes a directory.
 - The skill is now the single source of truth for all four surfaces: Claude Code (CLI + IDE)
   gets the skill + `/move` commands, Codex CLI gets the skill (`$baton-pass`), the Codex desktop
   app gets the skill + `~/.codex/prompts/*.md` (`/prompts:baton-pass`). Note: the Codex **CLI**
