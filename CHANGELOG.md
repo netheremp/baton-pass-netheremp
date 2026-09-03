@@ -34,6 +34,8 @@ Forked from [francisN21/baton-pass](https://github.com/francisN21/baton-pass) @ 
 - `bin/baton-pass.js`: fixed mojibake em-dashes in help/output; `init` / `commands` behavior
   unchanged.
 - `package.json`: ship `.codex-plugin/`; added `codex` / `agent-skill` / `openai-plugin` keywords.
+- Removed the duplicate top-level `SKILL.md` (a leftover from the pre-fork layout).
+  `skills/baton-pass/SKILL.md` is the one skill file; that is what Claude Code and Codex load.
 
 ## 0.6.9 - 2026-05-02
 

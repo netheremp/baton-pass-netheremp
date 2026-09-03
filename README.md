@@ -422,7 +422,6 @@ Or follow the step-by-step path in [INIT.md](./INIT.md).
 baton-pass-netheremp/
 ├── package.json
 ├── README.md
-├── SKILL.md
 ├── INIT.md
 ├── LICENSE
 ├── CONTRIBUTING.md

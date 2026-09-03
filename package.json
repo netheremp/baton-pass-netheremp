@@ -8,7 +8,6 @@
   "files": [
     ".claude-plugin/",
     ".codex-plugin/",
-    "SKILL.md",
     "INIT.md",
     "bin/",
     "commands/",
