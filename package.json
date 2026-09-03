@@ -1,12 +1,13 @@
 {
   "name": "baton-pass-netheremp",
-  "version": "0.6.9",
-  "description": "Low-token handoff workflow for multi-agent repos. Installs Claude Code slash commands and shared memory files. Derived from francisN21/baton-pass (MIT).",
+  "version": "0.7.0",
+  "description": "Low-token multi-agent handoff workflow. One skill + move set installable across Claude and Codex, CLI and app. Derived from francisN21/baton-pass (MIT).",
   "bin": {
     "baton-pass": "./bin/baton-pass.js"
   },
   "files": [
     ".claude-plugin/",
+    ".codex-plugin/",
     "SKILL.md",
     "INIT.md",
     "bin/",
@@ -21,6 +22,10 @@
     "claude-code",
     "claude-code-plugin",
     "claude-skill",
+    "codex",
+    "codex-cli",
+    "agent-skill",
+    "openai-plugin",
     "ai-agents",
     "multi-agent",
     "handoff",

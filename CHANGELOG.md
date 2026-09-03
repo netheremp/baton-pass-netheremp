@@ -15,6 +15,26 @@ Forked from [francisN21/baton-pass](https://github.com/francisN21/baton-pass) @ 
   `package.json` name, and install instructions in README.md and SKILL.md.
 - Added attribution to LICENSE (original © francisN21, modifications © netheremp).
 
+## 0.7.0 - 2026-09-03
+
+- Cross-agent install: `baton-pass install` (also `sh scripts/install.sh` / `pwsh scripts/install.ps1`)
+  puts the `baton-pass` skill into `~/.claude` and every `~/.codex*` home in one step.
+  Auto-detects targets; `--claude` / `--codex` / `--claude-home` / `--codex-home` scope it,
+  `--link` symlinks the skill dir (so `git pull` updates every surface), `--skill-only` skips
+  the slash commands / app prompts, `--force` overwrites.
+- The skill is now the single source of truth for all four surfaces: Claude Code (CLI + IDE)
+  gets the skill + `/move` commands, Codex CLI gets the skill (`$baton-pass`), the Codex desktop
+  app gets the skill + `~/.codex/prompts/*.md` (`/prompts:baton-pass`). Note: the Codex **CLI**
+  has no file-prompt loader at 0.152–0.153, so `$baton-pass` / auto-trigger is its entry point.
+- Added `.codex-plugin/plugin.json` (mirrors `.claude-plugin/plugin.json`, `"skills": "./skills/"`)
+  so the workflow can be installed via Codex `/plugins` and submitted to the OpenAI universal
+  plugin directory.
+- `skills/baton-pass/SKILL.md`: tightened `description` for cross-agent trigger matching and
+  Codex's shorter skill-list budget; Quick Setup now covers all surfaces. No move-set changes.
+- `bin/baton-pass.js`: fixed mojibake em-dashes in help/output; `init` / `commands` behavior
+  unchanged.
+- `package.json`: ship `.codex-plugin/`; added `codex` / `agent-skill` / `openai-plugin` keywords.
+
 ## 0.6.9 - 2026-05-02
 
 - Bumped version to align marketplace.json, plugin.json, and package.json after 0.6.8 was published to npm without updating plugin manifests.

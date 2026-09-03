@@ -1,6 +1,6 @@
 ---
 name: baton-pass
-description: Multi-agent handoff workflow for coding repos. Use this skill whenever: setting up a repo for multi-agent work (/new-game), pausing or transferring work between Claude/Codex/other agents (/save-state, /baton-pass), receiving handed-off work from another agent (/foresight), checking who currently owns the work (/party-check), auditing what was actually completed vs claimed across sessions (/hindsight), or when context/tokens are running low and work must continue in a new session. Also invoke when a user mentions task lists, worktrees, multi-agent plans, or handoff continuity.
+description: Multi-agent handoff workflow for coding repos, shared across Claude and Codex. Use when work must pause, transfer, or resume between agents or sessions — new-game (set up a repo), save-state (pause without handoff), baton-pass (hand off on low tokens or ownership change), foresight (receive and verify), party-check (who owns it now), hindsight (audit claimed-vs-done), dragon-dance (record a workflow lesson). Invoke as /move, $move, or plain name; also on task lists, worktrees, multi-agent plans, or low context.
 ---
 
 # Baton Pass
@@ -11,32 +11,36 @@ This is a low-token workflow utility, not a documentation ceremony.
 
 ## Quick Setup
 
-### Install the skill (recommended)
+### Install on every agent (once per machine)
 
-In Claude Code:
+```bash
+npx github:netheremp/baton-pass-netheremp install
 ```
-/plugin marketplace add netheremp/baton-pass-netheremp
-/plugin install baton-pass-netheremp@baton-pass-netheremp
-```
+
+Installs this skill into `~/.claude` and every `~/.codex*` home. Then:
+- Claude Code (CLI + IDE) — skill auto-loads; `/new-game` `/save-state` `/baton-pass` `/foresight` `/dragon-dance` `/party-check` `/hindsight`
+- Codex CLI — skill auto-loads; run it explicitly with `$baton-pass`
+- Codex desktop app — skill auto-loads; `/prompts:baton-pass` in the composer
+
+Alternatives: `/plugin marketplace add netheremp/baton-pass-netheremp` (Claude Code) or `/plugins` → install (Codex).
 
 ### Initialize a repo for multi-agent work
 
 ```bash
-node ./bin/baton-pass.js init
+npx github:netheremp/baton-pass-netheremp init
 ```
 
-Add `--track-state` if you want handoff state committed to git (for teams that need shared history). Default is local-only (gitignored).
+Add `--track-state` to commit handoff state to git (teams that need shared history). Default is local-only (gitignored).
 
 This creates:
-- `baton-pass.config.json` — tells the workflow where your memory files live
+- `baton-pass.config.json` — where the workflow finds your memory files
 - `baton-pass.state.json` — lightweight shared ownership state
 - `docs/agent-handoff.md` — repo-specific rules for all agents
 - `docs/current-state.md` — what is happening right now
 - `docs/next-task.md` — who owns the work and what comes next
 - `docs/progress.md` — running session log (append-only)
 
-And installs slash commands into `.claude/commands/`:
-`/new-game` `/save-state` `/baton-pass` `/foresight` `/dragon-dance` `/party-check` `/hindsight`
+`init` also drops the `/move` slash commands into the repo's `.claude/commands/`.
 
 ## The Move Set
 

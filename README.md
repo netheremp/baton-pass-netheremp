@@ -11,6 +11,8 @@ Built for teams running **Claude + Codex** (or any two agents) on the same repo.
 >   (`commands` / `skills` were not in the schema-required form).
 > - Moved the plugin skill to `skills/baton-pass/SKILL.md` so Claude Code registers it.
 > - Renamed the plugin and marketplace to `baton-pass-netheremp`.
+> - Added cross-agent install (`baton-pass install`) and a `.codex-plugin/` manifest so the one
+>   skill works on Claude Code and Codex, CLI and app.
 >
 > See [`CHANGELOG.md`](./CHANGELOG.md) and the original project for full history.
 
@@ -262,47 +264,72 @@ hindsight  →  dragon-dance (if gaps or unresolved risks found)
 
 ---
 
-## Install For Claude Code
+## Install
 
-In Claude Code:
+One command — works on Claude and Codex, CLI and app:
+
+```bash
+npx github:netheremp/baton-pass-netheremp install
+```
+
+`npx` runs the tool straight from GitHub: no clone, nothing installed permanently. It copies the
+`baton-pass` skill into `~/.claude` and every `~/.codex*` home and reports what it wrote (existing
+files are skipped; pass `--force` to overwrite).
+
+| Surface | What lands | How to invoke |
+|---|---|---|
+| Claude Code (CLI + IDE) | skill + `/move` commands under `~/.claude` | skill auto-loads; `/new-game` … `/hindsight` |
+| Codex CLI (every home) | skill under `$CODEX_HOME/skills` | skill auto-loads; `$baton-pass` |
+| Codex desktop app | skill + `~/.codex/prompts/*.md` | skill auto-loads; `/prompts:baton-pass` |
+
+> The Codex **CLI** (0.152–0.153) has no file-prompt loader, so `$baton-pass` (or letting the skill
+> auto-trigger) is its entry point. The `/prompts:` menu is a Codex **desktop-app** feature.
+
+### From a clone
+
+```bash
+git clone https://github.com/netheremp/baton-pass-netheremp
+sh baton-pass-netheremp/scripts/install.sh        # Windows: pwsh baton-pass-netheremp/scripts/install.ps1
+```
+
+Flags (pass through either the `npx` or the script form):
+
+```
+--link                symlink the skill dir instead of copying — `git pull` then updates every surface
+--claude | --codex    restrict to one platform (default: both, auto-detected)
+--claude-home <dir>   use an explicit Claude home (repeatable)
+--codex-home <dir>    use an explicit Codex home (repeatable; $CODEX_HOME is picked up)
+--skill-only          skip the slash commands / app prompts, install the skill only
+--force               overwrite existing files
+```
+
+### Claude Code plugin (per repo)
 
 ```text
 /plugin marketplace add netheremp/baton-pass-netheremp
 /plugin install baton-pass-netheremp@baton-pass-netheremp
 ```
 
-From a terminal:
+From a terminal, or from a local clone:
 
 ```bash
 claude plugin marketplace add https://github.com/netheremp/baton-pass-netheremp
+claude plugin marketplace add /path/to/baton-pass-netheremp        # local clone
 claude plugin install baton-pass-netheremp@baton-pass-netheremp
 ```
 
-Or install from a local clone:
+### Codex plugin / OpenAI marketplace
 
-```bash
-claude plugin marketplace add /path/to/baton-pass-netheremp
-claude plugin install baton-pass-netheremp@baton-pass-netheremp
-```
-
-After installing the plugin, Claude Code can use the `baton-pass` skill automatically and these slash commands become available:
-
-```text
-/new-game
-/save-state
-/baton-pass
-/foresight
-/dragon-dance
-/party-check
-/hindsight
-```
+`.codex-plugin/plugin.json` makes the workflow installable through Codex `/plugins` and ready to
+submit to the OpenAI universal plugin directory (shared by ChatGPT and Codex). For local testing,
+add this repo as a local marketplace and install from it.
 
 ## Install Project Files
 
 Use this path when you want to add the shared handoff files and `.claude/commands/` into a repo.
 
 ```bash
-node ./bin/baton-pass.js init
+npx github:netheremp/baton-pass-netheremp init     # or, from a clone: node ./bin/baton-pass.js init
 ```
 
 This installs the shared memory files, Claude Code slash commands, and a `.gitignore` block for Baton Pass local files into your project.
@@ -356,7 +383,8 @@ Each command tells Claude exactly what to do for that move — no copy-pasting i
 ### Options
 
 ```bash
-node ./bin/baton-pass.js init [target-dir]      # install into a specific directory
+node ./bin/baton-pass.js install                # user-level: skill for Claude + Codex, CLI + app
+node ./bin/baton-pass.js init [target-dir]      # repo: memory files + Claude commands
 node ./bin/baton-pass.js init --track-state     # leave state files trackable in git
 node ./bin/baton-pass.js commands [target-dir]  # install only slash commands
 node ./bin/baton-pass.js init --force           # overwrite existing files
@@ -402,12 +430,16 @@ baton-pass-netheremp/
 ├── .claude-plugin/
 │   ├── plugin.json        ← Claude Code plugin manifest
 │   └── marketplace.json   ← single-plugin marketplace pointing at this repo
+├── .codex-plugin/
+│   └── plugin.json        ← Codex / OpenAI plugin manifest (points at skills/)
 ├── bin/
-│   └── baton-pass.js
+│   └── baton-pass.js      ← install (user-level) + init/commands (per-repo)
 ├── skills/
 │   └── baton-pass/
-│       └── SKILL.md        ← plugin skill definition (loaded by Claude Code)
+│       └── SKILL.md        ← the skill — single source of truth for Claude + Codex
 ├── scripts/
+│   ├── install.sh         ← wrapper for `baton-pass install`
+│   ├── install.ps1
 │   ├── new-game.ps1
 │   ├── new-game.sh
 │   ├── init-baton-pass.ps1
