@@ -1,6 +1,6 @@
 {
   "name": "baton-pass-netheremp",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Low-token handoff workflow for multi-agent repos, with Claude Code skills and slash commands for continuity, transfer, receive, ownership checks, and handoff audits. Derived from francisN21/baton-pass (MIT).",
   "author": {
     "name": "netheremp"

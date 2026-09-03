@@ -1,9 +1,9 @@
 {
   "name": "baton-pass-netheremp",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Low-token multi-agent handoff workflow. One skill + move set installable across Claude and Codex, CLI and app. Derived from francisN21/baton-pass (MIT).",
   "bin": {
-    "baton-pass": "./bin/baton-pass.js"
+    "baton-pass": "bin/baton-pass.js"
   },
   "files": [
     ".claude-plugin/",
@@ -37,7 +37,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/netheremp/baton-pass-netheremp.git"
+    "url": "git+https://github.com/netheremp/baton-pass-netheremp.git"
   },
   "homepage": "https://github.com/netheremp/baton-pass-netheremp",
   "engines": {

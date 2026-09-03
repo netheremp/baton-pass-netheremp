@@ -15,6 +15,13 @@ Forked from [francisN21/baton-pass](https://github.com/francisN21/baton-pass) @ 
   `package.json` name, and install instructions in README.md and SKILL.md.
 - Added attribution to LICENSE (original © francisN21, modifications © netheremp).
 
+## 0.7.1 - 2026-09-03
+
+- `package.json`: `bin` value is now `bin/baton-pass.js` (was `./bin/baton-pass.js`) — npm 11
+  rejects the `./` prefix and strips the `bin` entry on publish, which would have removed the
+  `baton-pass` command from the published package. `repository.url` normalized to `git+https://…`.
+  No code changes; `v0.7.0` shipped as a GitHub release only.
+
 ## 0.7.0 - 2026-09-03
 
 - Cross-agent install: `baton-pass install` (also `sh scripts/install.sh` / `pwsh scripts/install.ps1`)
