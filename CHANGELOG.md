@@ -28,6 +28,10 @@ Forked from [francisN21/baton-pass](https://github.com/francisN21/baton-pass) @ 
   handoff of a banana on a teal tile — wired into `.codex-plugin/plugin.json`
   (`interface.composerIcon` / `logo` / `brandColor "#0D5257"`). `interface.capabilities` is now
   `["Read", "Write"]`. `package.json` ships `assets/`. No code or skill changes.
+- Submitted to the OpenAI plugin directory as v0.7.2 and approved (live as
+  `baton-pass-netheremp@openai-curated`). OpenAI's canonical build of the submission,
+  `baton-pass-netheremp.tar`, is attached as an asset on the
+  [v0.7.2 GitHub release](https://github.com/netheremp/baton-pass-netheremp/releases/tag/v0.7.2).
 
 ## 0.7.1 - 2026-09-03
 
