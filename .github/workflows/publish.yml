@@ -19,7 +19,7 @@ jobs:
           registry-url: "https://registry.npmjs.org"
 
       - run: node scripts/check-manifests.js
-      - run: node --test test/
+      - run: node --test
 
       - name: Tag must match package.json version
         run: |

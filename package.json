@@ -6,7 +6,7 @@
     "baton-pass": "bin/baton-pass.js"
   },
   "scripts": {
-    "test": "node --test test/"
+    "test": "node --test"
   },
   "files": [
     ".claude-plugin/",
