@@ -154,12 +154,16 @@ Default prefix `refs/baton-pass/`. Some hosts reject custom ref namespaces, so `
 **probes** the prefix and, on rejection, falls back to a configured ordinary-branch-space prefix.
 The chosen prefix is **pinned at genesis**. Participants never switch prefix silently.
 
+All immutable refs are **namespaced by `epoch_id`**, so a later epoch on the same repository can
+never collide with, or resurrect, an earlier epoch's objects.
+
 | Ref | Purpose |
 |---|---|
-| `<prefix>state` | Control commit chain |
+| `<prefix>state` | Control commit chain of the **active** epoch (§6.5) |
 | `<prefix>presence/<registration_id>` | Advisory presence, one writer |
-| `<prefix>result/<claim_id>` | Immutable per-claim candidate (§6.3) |
-| `<prefix>plan/<plan_revision>` | Immutable pinned plan revision (§6.3) |
+| `<prefix>e/<epoch_id>/plan/<plan_revision>` | Immutable pinned plan revision |
+| `<prefix>e/<epoch_id>/result/<claim_id>/<candidate_generation>` | Immutable candidate (§6.3) |
+| `<prefix>e/<epoch_id>/report/<integration_attempt_id>` | Immutable authoritative report |
 | `<plan.integration_branch>` | Integration branch |
 
 ### 6.3 Object reachability
@@ -167,24 +171,43 @@ The chosen prefix is **pinned at genesis**. Participants never switch prefix sil
 **A textual OID in a control record does not make its object fetchable.** A host serves only
 objects reachable from an advertised ref. Therefore:
 
-- Each immutable plan revision is published at `<prefix>plan/<plan_revision>` and pinned at genesis
-  or plan revision. The validator reads the plan through that ref, never by bare OID.
-- In `remote` mode a claim result is published at `<prefix>result/<claim_id>` with expected-OID CAS
-  **before** the `done` transition. `done` records the ref name and OID together. The ref is
-  **frozen** for the duration of validation and integration.
-- In `common-dir` mode the shared object store is read directly; the result ref is still written so
-  the board and validator use one code path.
-- Result refs are garbage-collected only after `integrated` or `cancel`, plus a retention grace.
-  Deleting a result ref is never a claim transition.
+- Each immutable plan revision is published at its epoch-namespaced plan ref with **expected-absent**
+  CAS, and both its **commit OID and blob OID** are pinned. The validator reads the plan through that
+  ref, never by bare OID.
+- A claim result is published at `<prefix>e/<epoch_id>/result/<claim_id>/<candidate_generation>`
+  with **expected-absent** CAS **before** the `done` transition. `done` records ref, OID, and
+  `candidate_generation` together. Each candidate ref is **write-once and immutable**, frozen for
+  validation and integration.
+- **A new candidate never overwrites an old one.** §15.1 remediation increments
+  `candidate_generation` and publishes a new ref. A superseded candidate is retained until the claim
+  reaches `integrated`, `cancel`, or `revoke`, then GC'd after a retention grace.
+- The authoritative validator report is published at its epoch-namespaced report ref with
+  **expected-absent** CAS **before** its ref and OID are embedded in the merge commit or recorded on
+  `integrated` (§14 steps 12-13).
+- In `common-dir` mode the shared object store is readable directly; every ref above is still written
+  so the board and validator use one code path.
+- Deleting any of these refs is never a control transition.
 
 ### 6.4 Backend pinning
 
 `coordination_backend_id` — backend kind plus stable repository identity — is pinned in genesis and
 verified by every participant before registration. **Never silently fall back between backends**;
-that creates split authority. Migration requires quiescence and a new epoch.
+that creates split authority. Migration requires quiescence and a new epoch (§6.5).
 
 Because git refuses to check out one branch in two linked worktrees, integration uses a dedicated
 integration worktree or ref plumbing.
+
+### 6.5 Epoch close and switch
+
+`<prefix>state` names exactly one **active** epoch. Closing is explicit and human-authorized:
+
+1. Reach quiescence — no active claims, no gates, nothing awaiting integration (as in §16).
+2. CAS an `epoch-closed` transition recording the final revision and integration head.
+3. Archive the chain at `<prefix>e/<epoch_id>/state-final`, then run `pair init` (§7) for the new
+   epoch, which pins the previous `epoch_id` as its predecessor.
+
+A closed epoch's immutable refs are retained under their own `epoch_id` namespace and never reused.
+A participant pinned to a closed epoch fails closed and reports the successor.
 
 ## 7. Initialization (`pair init`)
 
@@ -193,19 +216,27 @@ existing mismatched ref fails closed.**
 
 1. Validate the plan (§9). Refuse to proceed on any validation error.
 2. Select the backend and resolve `coordination_backend_id`; probe and select the ref prefix (§6.2).
-3. Publish the plan revision at `<prefix>plan/0` with **expected-absent** CAS.
+3. Publish the plan as **plan revision 1** at `<prefix>e/<epoch_id>/plan/1` with **expected-absent**
+   CAS. (Convention, used everywhere: **control revisions start at 0** — genesis — while **plan
+   revisions start at 1**.)
 4. Create or verify `plan.integration_branch` at `plan_base_oid`. If it exists at a different
    commit, fail closed and report.
-5. Create the genesis control commit (revision 0) with **expected-absent** CAS. Genesis records
-   `epoch_id`, `coordination_backend_id`, ref prefix, `plan_revision = 0`, the pinned plan ref and
-   OID, and the integration ref and OID.
+5. Create the genesis control commit (**control revision 0**) with **expected-absent** CAS. Genesis
+   records a freshly minted `epoch_id`, any predecessor `epoch_id`, `coordination_backend_id`, ref
+   prefix, `plan_revision = 1`, the pinned plan ref with its **commit and blob OIDs**, and the
+   integration ref and OID.
 6. Mark the epoch ready by a subsequent CAS transition.
 
 **Idempotent recovery.** A crash between steps leaves a partially initialized epoch. Re-running
-`pair init` re-derives each artifact and treats an existing artifact that **matches** the intended
-value as success, and any **mismatch** as fail-closed. Because genesis is the last creation before
-readiness, an epoch that is not marked ready is safe to re-init; one that is ready is never
-re-initialized.
+`pair init` **adopts and validates existing artifacts rather than reproducing them** — genesis
+contains a random `epoch_id`, so it can never be regenerated byte-identically, and any design that
+assumed it could would fail permanently after a post-genesis crash.
+
+Recovery reads whatever exists, in order: an absent artifact is created; a present artifact is
+**validated against the intended configuration** (plan content, backend id, prefix, integration
+head) and adopted on match; a **mismatch fails closed** and reports. If genesis already exists, its
+`epoch_id` and pinned OIDs become authoritative for the rest of recovery. Because readiness is
+marked last, a non-ready epoch is always safe to re-init; a ready one is never re-initialized.
 
 **Joiners** read genesis, then pin `(epoch_id, genesis_oid, coordination_backend_id, ref prefix)`
 locally before registering. A later epoch presenting a different genesis OID for the same repository
@@ -228,8 +259,9 @@ produces byte-identical state, so this is reachable in practice.
   "revision": 42,
   "parent_oid": "<full-git-oid>",
   "plan_revision": 1,
-  "plan_ref": "<prefix>plan/1",
+  "plan_ref": "<prefix>e/<epoch_id>/plan/1",
   "plan_commit_oid": "<full-git-oid>",
+  "plan_blob_oid": "<full-git-oid>",
   "event_id": "<uuid>",
   "event_type": "claim",
   "actor": { "registration_id": "<uuid>", "registration_generation": 1,
@@ -245,12 +277,12 @@ trusting state.
 
 | Collection | Contents |
 |---|---|
-| `epoch` | `epoch_id`, `coordination_backend_id`, ref prefix, genesis OID, readiness, `max_concurrent_writers` |
+| `epoch` | `epoch_id`, predecessor, `coordination_backend_id`, ref prefix, genesis OID, readiness, `max_concurrent_writers`, **`integration_head_oid`** (§8.4) |
 | `plan` | `plan_revision`, pinned plan ref/OID, `plan_base_oid`, supersession chain |
-| `registrations` | binding, generation, machine, capability evidence, mode, status |
+| `registrations` | binding, generation, machine, **materialized capability status and current nonce challenge** (§12.2), mode, status |
 | `machine_labels` | label → `machine_id` reservations |
 | `claims` | per item: `claim_id`, `claim_generation`, owner fence, effective boundary, `claim_base_oid`, result ref/OID, status |
-| `items` | `todo` \| `claimed` \| `blocked` \| `done` \| `integrating` \| `integrated` \| `cancelled` |
+| `items` | Item status: `todo` \| `claimed` \| `blocked` \| `done` \| `integrating` \| `integrated` \| `cancelled`. **Item status is distinct from claim-attempt status** — a released or revoked attempt returns the *item* to `todo` while its claim record is retained for history |
 | `contract_incidents` | open incidents and affected items |
 | `integration_gate` | singleton: item, `integration_attempt_id`, control OID and integration head at acquisition |
 | `plan_gate` | singleton: active plan revision, if any |
@@ -260,7 +292,7 @@ trusting state.
 | Event | Notes |
 |---|---|
 | `register` | Binds `(platform_kind, platform_session_id)` → `registration_id`, generation 1. Allocates a never-reused ordinal and reserves the machine label. Carries capability evidence and probe nonce |
-| `reactivate` | Rebinds an existing platform session; generation + 1; fences the prior incarnation |
+| `reactivate` | Rebinds an existing platform session; generation + 1; fences the prior incarnation. **Atomically rebinds that registration's active claims to the new generation** in the same CAS (§8.2.1) |
 | `claim` | Actor fence, `item_id`, `claim_id`, incremented `claim_generation`, **`claim_base_oid`** (§8.4), private `branch_ref`, entire effective write boundary, contract hashes, `lease_duration_ms`, `expires_at_advisory`, mode |
 | `lease-renew` | Refreshes `lease_duration_ms` and records the revision at renewal |
 | `scope-change` | Additions only, with current fence and prior effective-scope digest. Always a blocking CAS. Rejects overlap with any unordered item's reserved boundary, even unclaimed ones. Shrinking forbidden while work is unintegrated |
@@ -279,6 +311,23 @@ trusting state.
 
 The item fencing token is `(epoch_id, item_id, claim_generation, claim_id)`.
 
+#### 8.2.1 `reactivate` and active claims
+
+An owner fence includes `registration_generation`. Incrementing it alone would strand every active
+claim: the resumed runtime could not use its own claim, and the validator would reject it as stale.
+
+Therefore `reactivate` **atomically rebinds the registration's active claims to the new generation
+within the same CAS**. This is safe *because* it is atomic — an in-flight write from the previous
+incarnation still carries the old generation and remains fenced, while the resumed runtime continues
+seamlessly. `claim_id`, `claim_generation`, `claim_base_oid`, and the effective boundary are
+unchanged; only the owner fence advances. Claims that were `blocked` stay `blocked`.
+
+#### 8.2.2 Preconditions and effects
+
+Every event in the table above carries explicit preconditions and effects; §8.6 states them for item
+and claim transitions. An event name alone is not a specification, and an implementation must reject
+any event whose preconditions are unproven rather than assuming a default.
+
 ### 8.3 `done` versus `integrated`
 
 These are distinct and were previously conflated.
@@ -286,11 +335,13 @@ These are distinct and were previously conflated.
 - **`done`** — the owner asserts an **immutable, reachable candidate ready for authoritative
   validation**. It carries the published result ref and OID, commit range, actual-path manifest and
   digest, contract hashes as observed at the result head, local verification results, and a
-  **`preflight_report_digest`** from the owner's own pre-checks. It does **not** carry the
-  authoritative validator report, which does not exist yet. `done` does **not** release scope.
+  **`preflight_report_digest`** from the owner's own pre-checks, and the `candidate_generation`
+  (§6.3). It does **not** carry the authoritative validator report, which does not exist yet.
+  `done` does **not** release scope.
 - **`integrated`** — the validator (§14) has passed and the merge landed. It records the merge OID,
-  the `integration_attempt_id`, and the **authoritative report** stored as a reachable canonical
-  object with its ref and OID. Only `integrated` releases the item's reservation.
+  the `integration_attempt_id`, and the **authoritative report's ref and OID** (published
+  expected-absent at its epoch-namespaced ref, §6.3). It also updates
+  `state.integration_head_oid` (§8.4). Only `integrated` releases the item's reservation.
 
 An owner's preflight is advisory. Authority belongs solely to the validator run recorded on
 `integrated`.
@@ -301,8 +352,19 @@ Distinct names, distinct meanings:
 
 - **`plan_base_oid`** — the plan's immutable baseline. Contract hashes are computed here, and plan
   revision (§16) advances it. Never used for per-claim ranges.
-- **`claim_base_oid`** — the exact integration head captured **by the claim CAS itself** at claim
-  time. Dependency work therefore builds on already-integrated results.
+- **`claim_base_oid`** — the integration head the claim builds on, read from
+  **`state.integration_head_oid`** (§8.1). Dependency work therefore builds on already-integrated
+  results.
+
+**Git provides no cross-ref atomic compare-and-swap**, so a claim CAS on the control ref cannot by
+itself pin the *integration ref's* head: step 13 could move integration between a claimant's read
+and its write. Two rules close this without claiming atomicity git lacks:
+
+1. `state.integration_head_oid` is materialized **in control**, updated only by `integrated` and by
+   an authorized recovery finalize. A claim therefore reads and writes **one ref**, which its own
+   CAS does cover.
+2. **While the singleton integration gate is held, no new claim is admitted.** Integration is
+   bounded and rare, so the cost is small and the guarantee is exact.
 
 A claim's private branch starts at `claim_base_oid`. If the private branch already exists at a
 different commit, the claim adopts it only when `claim_base_oid` is an ancestor; otherwise it fails
@@ -322,17 +384,32 @@ takeover is manual (§8.7).
 
 ### 8.6 Legal transitions
 
-| From | To | Precondition |
-|---|---|---|
-| `todo` | `claimed` | Dependencies integrated; no live claim; boundary disjoint from every other active boundary; writers below `max_concurrent_writers` |
-| `claimed` | `blocked` | Self-block latch, or a contract incident naming the item |
-| `blocked` | `claimed` | Reconciliation recorded; fence current |
-| `claimed` | `done` | Result published and frozen; fence current; not blocked |
-| `claimed` | `released` / `cancelled` | Owner action, or human-authorized revoke |
-| `done` | `integrating` | Gate acquired (§8.2 `integration-started`) |
-| `integrating` | `integrated` | Validator passed and merge landed |
-| `integrating` | `blocked` | `validation-failed` |
-| `integrating` | `done` | `integration-aborted` for a transient cause; candidate unchanged |
+**Claim admission** (`todo` → `claimed`) requires all of: every `depends_on` item `integrated`; no
+live claim on the item; **the boundary disjoint from the reserved boundary of every distinct
+unordered item** — not merely of currently active claims, since an unclaimed item's boundary is
+still reserved by the plan; **no integration gate and no plan gate held** (§8.4); and, in full mode,
+live writers below `max_concurrent_writers`, or in degraded mode, **no other write claim at all**.
+
+| From | To | Event | Effect |
+|---|---|---|---|
+| `todo` | `claimed` | `claim` | Reserves the boundary; captures `claim_base_oid` |
+| `claimed` | `claimed` | `lease-renew` | Refreshes `lease_duration_ms`; records the revision |
+| `claimed` | `claimed` | `scope-change` | Additions only; boundary grows |
+| `claimed` | `blocked` | `block` | Self-block latch, or a contract incident naming the item |
+| `blocked` | `claimed` | `unblock` | Reconciliation recorded; fence current |
+| `claimed` | `done` | `done` | Candidate published and frozen; **scope stays reserved** |
+| `done` | `claimed` | `block` | A contract incident invalidates the candidate |
+| `claimed`/`blocked`/`done` | `todo` | `release` | Owner relinquishes; boundary freed; candidate retained then GC'd |
+| `claimed`/`blocked`/`done` | `cancelled` | `cancel` | Owner abandons the item; boundary freed |
+| `claimed`/`blocked`/`done` | `todo` | `revoke` | **Human-authorized** removal of another registration's claim (§8.7); boundary freed |
+| `done` | `integrating` | `integration-started` | Acquires the singleton gate; mints `integration_attempt_id` |
+| `integrating` | `integrated` | `integrated` | Validator passed, merge landed; boundary released |
+| `integrating` | `blocked` | `validation-failed` | Invariant violation; retained for diagnosis |
+| `integrating` | `done` | `integration-aborted` | Transient cause; candidate unchanged |
+
+`cancelled` is terminal for that item unless a plan revision (§16) reintroduces it. `release` and
+`revoke` both return the item to `todo` and free the boundary; they differ only in who authorized
+it, which the event records.
 
 ### 8.7 Manual recovery
 
@@ -406,7 +483,8 @@ output.
 
 Checks scope intersection for **every unordered item pair**, rejects overlaps, verifies contract
 hashes at `plan_base_oid`, ensures contract paths are not writable by consumers, checks the
-integration ref syntax, and pins the plan blob and commit OIDs into the epoch.
+integration ref syntax, and pins **both the plan commit OID and the plan blob OID** into the epoch,
+matching the genesis record (§7) and the control envelope (§8).
 
 Because the whole boundary is reserved at claim time, a poor partition costs **concurrency, not
 integrity**: too broad serialises work; too narrow triggers an early blocking scope-change. It can
@@ -476,13 +554,25 @@ A per-`(registration_id, registration_generation)` **local spool**. It is local 
 control is never read through it.
 
 Each message carries `message_id`, target fence, source control revision and claim fence, `kind`,
-`severity`, and `enqueued_at_advisory`.
+`severity`, `enqueued_at_advisory`, and a **`payload`** — the human-readable summary that is
+actually injected.
 
-- **Enqueue** and **claim-for-delivery** are atomic; a message is delivered once.
-- **Deduplicate** by `message_id` so a replayed producer cannot double-notify.
-- **Acknowledge** after successful injection; unacknowledged messages **replay after a crash**.
-- **Retention**: acknowledged messages are pruned; the spool is discarded when the generation ends,
-  since a fenced incarnation's notices are meaningless.
+**Delivery is at-least-once, not exactly-once.** A crash between injection and acknowledgement is
+indistinguishable from a crash before injection, so exactly-once is unachievable and must not be
+claimed.
+
+- **Enqueue** and **claim-for-delivery** are atomic, so two concurrent hook processes cannot deliver
+  the same message simultaneously.
+- The **`message_id` is exposed to the consumer** in the injected text, so a repeated notice is
+  recognisable as a repeat rather than a new event.
+- **Acknowledge** after injection. Unacknowledged messages **replay**, which is the price of
+  at-least-once.
+- **Deduplicate** against retained acknowledged `message_id`s, so a replayed producer cannot
+  re-notify.
+- **All handlers must be idempotent.** Re-injecting a notice is always safe; a notice never carries
+  authority, only information (§2).
+- **Retention**: acknowledged ids are retained for deduplication; the spool is discarded when the
+  generation ends, since a fenced incarnation's notices are meaningless.
 
 Producers are the board (§17) and the local guards (§13). `UserPromptSubmit` drains and injects.
 
@@ -517,11 +607,25 @@ nonce**.
 The hook writes the nonce plus event name, platform session id, hook hash, and runtime version into
 plugin data. The registrar accepts only the fresh nonce it issued.
 
-**Proof staleness is defined without a wall clock.** A proof is current when its nonce matches the
-one issued for the **current `registration_generation`** and the hook hash is unchanged. A new nonce
-is issued on each control transition the session performs; a session that performs a control
-transition without producing the corresponding hook proof is downgraded. Elapsed time is never the
-test.
+**Proofs must be visible in control**, or a participant on another machine could never evaluate
+"current proofs from every concurrently writing registration" — local plugin data is invisible to
+peers. Therefore capability status is **materialized in `state.registrations`** (§8.1) by a
+nonce-rotation protocol:
+
+1. Registration issues an initial challenge nonce, recorded in control.
+2. The hook writes the answering proof — nonce, event name, platform session id, hook hash, runtime
+   version — into local plugin data.
+3. **Every control event that actor writes carries the proof for the outstanding challenge and
+   rotates a fresh challenge** for the next one. The CAS rejects an event whose proof is absent,
+   stale, or carries a changed hook hash.
+
+Capability status is therefore refreshed by the actor's own control writes, and every peer reads it
+from the same authoritative chain.
+
+**Staleness is defined without a wall clock.** A proof is current when it answers the outstanding
+challenge for the **current `registration_generation`** with an unchanged hook hash. A session that
+performs a control transition without the corresponding proof is downgraded. Elapsed time is never
+the test. This is a cooperative protocol (§3): it detects broken or disabled hooks, not forgery.
 
 ### 12.3 Modes
 
@@ -554,8 +658,10 @@ Layered response, weakest to strongest:
    because without it the wasted-work window is unbounded: one autonomous turn may run for hours
    before `Stop` while editing out of scope.
 2. **Local fail-closed latch, then self-block.** On observed drift, a contract mismatch, or a lost
-   hook proof, the session **first sets a synchronous local latch** that refuses further out-of-scope
-   mutation, and only then attempts the `block` control CAS. The latch does not depend on the
+   hook proof, the session **first sets a synchronous local latch that denies ALL ordinary
+   mutation** — not merely out-of-scope mutation — permitting only the §13.1 remediation actions,
+   and only then attempts the `block` control CAS. Denying only out-of-scope writes would be
+   unsound: a session that has lost its hook proof cannot be trusted to evaluate its own scope. The latch does not depend on the
    network, so a session cannot keep writing while its control write is in flight or failing.
    A board **never** imposes authoritative quarantine; a delayed or false beat could halt valid work.
    Third-party quarantine is v1.1.
@@ -600,23 +706,28 @@ on hooks working. All reads use the adapter (§6.1).
     tools and timeouts fail explicitly. No command is silently skipped.
 11. No-write merge analysis against the leased integration head. **Automatic validation fails on
     every merge conflict** — see §15.1.
-12. Emit the **authoritative report**, stored as a reachable canonical object, bound to epoch, plan
-    ref/OID, control revision, integration head, claim fence, result ref/OID, `integration_attempt_id`,
-    path and contract digests, and verification results.
-13. Create the merge commit with the leased integration head as first parent. **Embed
-    `integration_attempt_id` and the report identity in the merge commit** so a later process can
-    prove which attempt landed. Verify the tree, then publish the integration ref with expected-OID
-    CAS.
+12. Build the **authoritative report**, bound to epoch, plan ref with commit and blob OIDs, control
+    revision, integration head, claim fence, result ref/OID/`candidate_generation`,
+    `integration_attempt_id`, path and contract digests, and verification results.
+13. Publish the report (step 12) at its epoch-namespaced ref with **expected-absent** CAS. Then
+    create the merge commit with the **leased integration head as first parent and the frozen
+    candidate head as second parent**, and **embed `integration_attempt_id` plus the report ref and
+    OID in the merge commit message** so a later process can prove which attempt landed. Verify the
+    tree, then publish the integration ref with expected-OID CAS.
 14. CAS-write `integrated` with the merge OID, `integration_attempt_id`, and report ref/OID; release
     the item's reservation and the gate.
 
 ### 14.1 Failure disposition
 
+**Releasing a held gate is itself a state change and requires a CAS.** Distinguish failures
+*before* the gate is acquired from failures *after*.
+
 | Situation | Event | Gate |
 |---|---|---|
-| Invariant violation (steps 4–11) | `validation-failed`; claim → `blocked` | Released |
-| Transient read/CAS race, stale integration head | none | Released; restart from step 1 |
-| Failure after step 13 push | Explicit recovery (§8.7) — inspect whether the attempt landed | **Held** |
+| Race at steps 1–3, gate never acquired | none — nothing to release | Not held; retry from step 1 |
+| Invariant violation (steps 4–11) | `validation-failed`; claim → `blocked` | Released by that CAS |
+| Transient read/CAS race after acquisition, or stale integration head | **`integration-aborted`** | Released by that CAS; restart from step 1 |
+| Failure after the step 13 push, outcome uncertain | Explicit recovery (§8.7) — inspect whether the attempt landed | **Held** |
 | Attempt landed but final CAS missing | `integrated` completed idempotently by `integration_attempt_id` | Released |
 
 **Never merge twice.** Because the attempt id is inside the merge commit, recovery can prove
@@ -635,8 +746,10 @@ Two tiers:
 The validator has no conflict exception: step 11 fails on every conflict.
 
 Resolution is a separate, **explicit human-authorized remediation**. Under it, an agent may resolve
-conflicts **wholly inside its own effective scope**, producing a **new immutable candidate** and a
-new `done` transition; the validator then reruns from step 1. Any conflict touching another
+conflicts **wholly inside its own effective scope**, publishing a **new immutable candidate at an
+incremented `candidate_generation`** (§6.3 — candidate refs are write-once, so remediation never
+overwrites the superseded one) and recording a new `done` transition; the validator then reruns from
+step 1. Any conflict touching another
 ownership boundary raises an event and stops. No agent ever silently edits another owner's files.
 
 ## 16. Plan revision
@@ -652,8 +765,9 @@ CAS-acquire the singleton `plan-revision-started` gate against exact control and
 If absorbing upstream, a human or CLI advances the integration branch under that gate; the new
 `plan_base_oid` must equal the resulting integration head and contract hashes are recomputed there.
 Validate schema, DAG, scopes, contracts, stable item ids, and the immutable history of already
-integrated items. Publish the new revision at `<prefix>plan/<n>` and pin it, then CAS `plan-revised`
-with `plan_revision + 1`, new refs and OIDs, and a `supersedes` link. **All old claim and validator
+integrated items. Publish the new revision at `<prefix>e/<epoch_id>/plan/<n>` with
+**expected-absent** CAS and pin its **commit and blob OIDs**, then CAS `plan-revised` with
+`plan_revision + 1`, new refs and OIDs, and a `supersedes` link. **All old claim and validator
 fences become invalid.** Release the gate only after the state transition; recovery is idempotent.
 
 A `contract-changed` incident blocks affected claims first and cannot be acknowledged away; this
