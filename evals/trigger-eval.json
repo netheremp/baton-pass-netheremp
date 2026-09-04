@@ -1,0 +1,20 @@
+[
+  {"query": "i'm about to run out of context on this refactor and i want the next codex session to pick it up cold. we're on feat/api-v2, i've done the service layer, controllers are half-done. write up where things stand so nobody has to re-explain anything.", "should_trigger": true},
+  {"query": "came back to bo_evolution after a week away. codex was working the topology migration before i left. before i touch anything, check whether docs/next-task.md and baton-pass.state.json still match what's actually in the repo.", "should_trigger": true},
+  {"query": "wait whose turn is it on this repo right now, claude or codex? and what was the next thing they were supposed to do?", "should_trigger": true},
+  {"query": "we finally shipped the auth milestone. go back over every handoff in docs/progress.md and tell me what each agent actually delivered vs what they claimed, and whether anything was left unresolved.", "should_trigger": true},
+  {"query": "this repo has no handoff system and claude + codex keep losing track of state between sessions. set up the minimum shared files so they can trade off cleanly.", "should_trigger": true},
+  {"query": "stopping for the day. i'm mid-way through wiring the rate limiter, 3 of 8 tests written, RATE_LIMIT_RPM not in .env.example yet. save my progress so i can resume tomorrow without digging.", "should_trigger": true},
+  {"query": "the previous handoff note said the test suite was green but it isn't — one of them is a stub with a TODO. this keeps happening with our transfers. record the lesson so future sessions don't repeat it.", "should_trigger": true},
+  {"query": "i've finished the react frontend for the dashboard. commit what i have, then hand off to codex with a note on exactly what the API side still needs — endpoints, auth, the response shape.", "should_trigger": true},
+  {"query": "resuming after a save-state from last night. verify the repo still lines up with the notes before i keep going on the parser work.", "should_trigger": true},
+  {"query": "add a token-bucket rate limiter to the public API — 60 rpm default, burst of 10, configurable via env, return a 429 with a JSON body.", "should_trigger": false},
+  {"query": "review this PR before i merge it — mainly worried about N+1 queries in the new reporting endpoint and whether the error handling around the payment call is complete.", "should_trigger": false},
+  {"query": "git says my working tree is dirty and i genuinely don't remember what i changed in the last hour. walk me through the diff and help me decide what to keep.", "should_trigger": false},
+  {"query": "write my standup from this week's commits — yesterday's work, what i'm doing today, and flag the thing i'm blocked on with the staging db.", "should_trigger": false},
+  {"query": "the CI deploy keeps failing at the prisma migrate step. it works fine in staging but blows up in prod. help me figure out why.", "should_trigger": false},
+  {"query": "i'm handing this spec doc off to the design team tomorrow — tighten the formatting, add a one-paragraph summary at the top, and make sure the open questions are called out.", "should_trigger": false},
+  {"query": "set up a git worktree for the hotfix so i can work on it without disturbing my current feature branch.", "should_trigger": false},
+  {"query": "what's the current state of the prod deploy — is v2.3 actually live yet or still rolling out?", "should_trigger": false},
+  {"query": "document how our multi-agent code review pipeline works — which reviewer agents run, in what order, and what each one gates on.", "should_trigger": false}
+]

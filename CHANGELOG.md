@@ -15,6 +15,14 @@ Forked from [francisN21/baton-pass](https://github.com/francisN21/baton-pass) @ 
   `package.json` name, and install instructions in README.md and SKILL.md.
 - Added attribution to LICENSE (original © francisN21, modifications © netheremp).
 
+## Unreleased
+
+- Added `evals/` — `trigger-eval.json` (18 realistic should-/should-not-trigger queries for the
+  skill `description`) plus a README on running the optimizer. Not shipped in the npm package.
+  The `description` itself is unchanged: the automated optimizer's triggering measurement
+  didn't work in the environment it was tried in (scored the known-good description at 0%
+  recall), so no change was applied.
+
 ## 0.8.0 - 2026-09-04
 
 - New `baton-pass status [dir] [--json]` — a mechanical readout of the current Turn State
