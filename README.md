@@ -474,3 +474,7 @@ baton-pass-netheremp/
 ## License
 
 [MIT](./LICENSE) — original work © francisN21, modifications © netheremp. Use it, adapt it, share it.
+
+## Privacy
+
+No data collection, no network, no accounts — see [PRIVACY.md](./PRIVACY.md).
