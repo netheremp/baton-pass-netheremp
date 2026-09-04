@@ -1,6 +1,6 @@
 {
   "name": "baton-pass-netheremp",
-  "version": "0.7.2",
+  "version": "0.7.3",
   "description": "Low-token multi-agent handoff workflow. One skill and move set for continuity, transfer, receive, ownership checks, and handoff audits. Derived from francisN21/baton-pass (MIT).",
   "author": {
     "name": "netheremp",
@@ -20,7 +20,7 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "Baton Pass",
-    "shortDescription": "Low-token handoff workflow for multi-agent repos.",
+    "shortDescription": "Hand off work between agents.",
     "longDescription": "One skill and move set that lets Claude, Codex, and other agents hand work off to each other - save-state, baton-pass, foresight, party-check, hindsight, dragon-dance - writing only the delta so the next agent continues without recap or drift. Derived from francisN21/baton-pass (MIT).",
     "developerName": "netheremp",
     "category": "Productivity",
@@ -28,10 +28,12 @@
       "Read",
       "Write"
     ],
+    "websiteURL": "https://github.com/netheremp/baton-pass-netheremp",
+    "privacyPolicyURL": "https://github.com/netheremp/baton-pass-netheremp/blob/main/PRIVACY.md",
     "defaultPrompt": [
-      "Save state and hand this off to the next agent.",
-      "I'm resuming a handoff - run foresight first.",
-      "Who owns this work right now?"
+      "Save state and pass the baton to the next agent.",
+      "Resuming a handoff — run foresight before I continue.",
+      "Check who owns the work now and what comes next."
     ],
     "brandColor": "#0D5257",
     "composerIcon": "./assets/icon.png",

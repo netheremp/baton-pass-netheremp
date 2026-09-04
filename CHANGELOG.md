@@ -15,6 +15,13 @@ Forked from [francisN21/baton-pass](https://github.com/francisN21/baton-pass) @ 
   `package.json` name, and install instructions in README.md and SKILL.md.
 - Added attribution to LICENSE (original © francisN21, modifications © netheremp).
 
+## 0.7.3 - 2026-09-04
+
+- Synced `.codex-plugin/plugin.json` with the OpenAI plugin directory submission:
+  `interface.shortDescription` → "Hand off work between agents.", added `websiteURL` and
+  `privacyPolicyURL`, and updated `defaultPrompt` to the final three starter prompts.
+  No code or skill changes.
+
 ## 0.7.2 - 2026-09-04
 
 - Added a plugin icon and logo (`assets/icon.png`, `assets/logo.png`) — a two-hands relay
