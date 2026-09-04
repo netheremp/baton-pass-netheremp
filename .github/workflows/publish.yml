@@ -29,6 +29,11 @@ jobs:
           test "$TAG" = "$PKG"
 
       - name: Publish to npm (with provenance)
-        run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "::warning::NPM_TOKEN secret not set — skipping npm publish. Add it in Settings → Secrets and variables → Actions."
+            exit 0
+          fi
+          npm publish --provenance --access public
