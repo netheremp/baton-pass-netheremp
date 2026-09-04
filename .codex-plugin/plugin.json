@@ -1,6 +1,6 @@
 {
   "name": "baton-pass-netheremp",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "description": "Low-token multi-agent handoff workflow. One skill and move set for continuity, transfer, receive, ownership checks, and handoff audits. Derived from francisN21/baton-pass (MIT).",
   "author": {
     "name": "netheremp",
@@ -25,12 +25,16 @@
     "developerName": "netheremp",
     "category": "Productivity",
     "capabilities": [
+      "Read",
       "Write"
     ],
     "defaultPrompt": [
       "Save state and hand this off to the next agent.",
       "I'm resuming a handoff - run foresight first.",
       "Who owns this work right now?"
-    ]
+    ],
+    "brandColor": "#0D5257",
+    "composerIcon": "./assets/icon.png",
+    "logo": "./assets/logo.png"
   }
 }

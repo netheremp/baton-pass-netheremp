@@ -15,6 +15,13 @@ Forked from [francisN21/baton-pass](https://github.com/francisN21/baton-pass) @ 
   `package.json` name, and install instructions in README.md and SKILL.md.
 - Added attribution to LICENSE (original © francisN21, modifications © netheremp).
 
+## 0.7.2 - 2026-09-04
+
+- Added a plugin icon and logo (`assets/icon.png`, `assets/logo.png`) — a two-hands relay
+  handoff of a banana on a teal tile — wired into `.codex-plugin/plugin.json`
+  (`interface.composerIcon` / `logo` / `brandColor "#0D5257"`). `interface.capabilities` is now
+  `["Read", "Write"]`. `package.json` ships `assets/`. No code or skill changes.
+
 ## 0.7.1 - 2026-09-03
 
 - `package.json`: `bin` value is now `bin/baton-pass.js` (was `./bin/baton-pass.js`) — npm 11
