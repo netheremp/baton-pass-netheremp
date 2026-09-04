@@ -107,6 +107,10 @@ Use when:
 - multiple agents share the repo
 - you want the current status without paying for a full `foresight`
 
+`party-check` is the in-session move. From a plain terminal (no agent, no tokens) run
+`baton-pass status` — it prints the same ownership read plus the recent baton chain, and
+`baton-pass status --json` gives machine-readable output for scripts and hooks.
+
 ### `hindsight`
 
 Use when:

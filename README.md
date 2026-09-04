@@ -1,9 +1,14 @@
 # 🏃 baton-pass-netheremp
 
+[![CI](https://github.com/netheremp/baton-pass-netheremp/actions/workflows/ci.yml/badge.svg)](https://github.com/netheremp/baton-pass-netheremp/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/baton-pass-netheremp)](https://www.npmjs.com/package/baton-pass-netheremp)
+[![license](https://img.shields.io/npm/l/baton-pass-netheremp)](./LICENSE)
+
 > **A low-token handoff workflow for multi-agent repos.**
 > When one AI runs out of context, the next one picks up exactly where it left off — no recap, no drift, no duplicated work.
 
-Built for teams running **Claude + Codex** (or any two agents) on the same repo.
+Built for teams running **Claude + Codex** (or any two agents) on the same repo. Published to
+npm, the Claude Code plugin marketplace, and the OpenAI plugin directory.
 
 > **Attribution.** This is a derivative of [`francisN21/baton-pass`](https://github.com/francisN21/baton-pass),
 > used under the MIT License. Changes in this copy:
@@ -216,9 +221,38 @@ Recommended state values:
 | `claimed` | receiver ran `foresight` and is continuing |
 | `blocked` | cannot proceed — reason is in `next-task` |
 
+### `baton-pass status`
+
+A mechanical readout from the terminal — no agent needed. Reads `baton-pass.state.json`,
+cross-checks it against the `next-task` Turn State, and shows the recent chain from `progress`:
+
+```text
+$ baton-pass status
+
+Baton Pass — status
+────────────────────────────────────────
+  state:       handed-off
+  last move:   baton-pass
+  last agent:  codex
+  next agent:  claude
+  updated:     2026-09-04
+  summary:     CSP + trusted-origin done; deploy next.
+
+Recent chain (progress log)
+────────────────────────────────────────
+  Session 002    2026-09-04  codex -> claude
+                 Add trusted-origin protection and CSP before deploy
+```
+
+`baton-pass status --json` emits the same data as JSON for scripts and other agents.
+(The `party-check` move is the agent-driven version that *interprets* this.)
+
 ---
 
 ## Recommended Flows
+
+See [`examples/multi-agent-chain.md`](./examples/multi-agent-chain.md) for a full narrated
+Claude → Codex → Claude chain showing every move in context.
 
 **Normal pause/resume:**
 ```
@@ -386,6 +420,7 @@ Each command tells Claude exactly what to do for that move — no copy-pasting i
 node ./bin/baton-pass.js install                # user-level: skill for Claude + Codex, CLI + app
 node ./bin/baton-pass.js init [target-dir]      # repo: memory files + Claude commands
 node ./bin/baton-pass.js init --track-state     # leave state files trackable in git
+node ./bin/baton-pass.js status [dir] [--json]  # show Turn State + recent baton chain
 node ./bin/baton-pass.js commands [target-dir]  # install only slash commands
 node ./bin/baton-pass.js init --force           # overwrite existing files
 node ./bin/baton-pass.js help
@@ -424,19 +459,25 @@ baton-pass-netheremp/
 ├── README.md
 ├── INIT.md
 ├── LICENSE
+├── PRIVACY.md
 ├── CONTRIBUTING.md
 ├── CHANGELOG.md
+├── .github/workflows/    ← CI (manifests + tests) and tag → npm publish
 ├── .claude-plugin/
 │   ├── plugin.json        ← Claude Code plugin manifest
 │   └── marketplace.json   ← single-plugin marketplace pointing at this repo
 ├── .codex-plugin/
-│   └── plugin.json        ← Codex / OpenAI plugin manifest (points at skills/)
+│   ├── plugin.json        ← Codex / OpenAI plugin manifest (points at skills/)
+│   └── assets/ · assets/  ← plugin icon + logo
 ├── bin/
-│   └── baton-pass.js      ← install (user-level) + init/commands (per-repo)
+│   └── baton-pass.js      ← install (user-level) + init / status / commands (per-repo)
+├── test/
+│   └── cli.test.js        ← node --test smoke suite
 ├── skills/
 │   └── baton-pass/
 │       └── SKILL.md        ← the skill — single source of truth for Claude + Codex
 ├── scripts/
+│   ├── check-manifests.js ← repo consistency check (run in CI)
 │   ├── install.sh         ← wrapper for `baton-pass install`
 │   ├── install.ps1
 │   ├── new-game.ps1
@@ -452,7 +493,8 @@ baton-pass-netheremp/
 │   ├── party-check.md
 │   └── hindsight.md
 ├── examples/
-│   └── example-baton-pass.md
+│   ├── example-baton-pass.md    ← one completed baton
+│   └── multi-agent-chain.md     ← a full Claude → Codex → Claude chain, narrated
 └── templates/
     ├── agent-handoff.template.md
     ├── baton-pass.config.template.json

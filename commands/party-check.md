@@ -20,4 +20,8 @@ Steps:
 
 Nothing else. This is a cheap status read, not a foresight.
 
+`party-check` is the in-session move — an agent runs it and composes the summary line.
+Outside a session, `baton-pass status` prints the same ownership read from a plain terminal
+(no agent, no tokens) and also shows the recent baton chain; `baton-pass status --json` for scripts.
+
 Arguments: $ARGUMENTS

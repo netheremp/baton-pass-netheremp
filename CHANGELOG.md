@@ -15,6 +15,21 @@ Forked from [francisN21/baton-pass](https://github.com/francisN21/baton-pass) @ 
   `package.json` name, and install instructions in README.md and SKILL.md.
 - Added attribution to LICENSE (original © francisN21, modifications © netheremp).
 
+## 0.8.0 - 2026-09-04
+
+- New `baton-pass status [dir] [--json]` — a mechanical readout of the current Turn State
+  (from `baton-pass.state.json`, cross-checked against `docs/next-task.md`) plus the recent
+  baton chain from `docs/progress.md`. Flags state-file / next-task disagreements; exits 1 in
+  an uninitialised repo. `--json` emits structured output for scripts and other agents. The
+  `party-check` move is still the agent-driven version that interprets this.
+- Added a `test/` smoke suite (`node --test test/`, 14 tests) covering `help` / `install` /
+  `init` / `status` — idempotency, `--force`, `--link` safety, arg guards, exit codes.
+  `package.json` gains a `test` script.
+- `.claude-plugin/plugin.json` description now matches the others ("across Claude and Codex,
+  CLI and app"). No behaviour change.
+- GitHub Actions CI: validates `.codex-plugin/plugin.json`, JSON-lints the manifests, runs
+  the test suite on Node 18/20/22; a tag push publishes to npm with provenance.
+
 ## 0.7.3 - 2026-09-04
 
 - Synced `.codex-plugin/plugin.json` with the OpenAI plugin directory submission:

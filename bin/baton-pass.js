@@ -36,6 +36,7 @@ Usage:
   npx baton-pass install [flags]         install the skill + moves for Claude and Codex (user-level)
   npx baton-pass init [target-dir]       set up the current repo (memory files + Claude commands)
   npx baton-pass init --track-state      same, but leave state files trackable by git
+  npx baton-pass status [dir] [--json]   show the current Turn State and recent baton chain
   npx baton-pass commands [target-dir]   install only Claude Code slash commands into a repo
   npx baton-pass help                    show this message
 
@@ -182,6 +183,8 @@ Done. Next steps:
   4. Review the Baton Pass block added to .gitignore (${trackState ? 'state files are trackable' : 'state files are local-only'})
   5. Start appending sessions to docs/progress.md
 
+Run  baton-pass status  any time to see who owns the work.
+
 Slash commands are ready in .claude/commands/
 Use /new-game, /save-state, /baton-pass, /foresight, /dragon-dance, /party-check, /hindsight in Claude Code.
 `)
@@ -313,6 +316,141 @@ function parseInstallArgs(argv) {
 }
 
 // ---------------------------------------------------------------------------
+// status — a mechanical readout of the current Turn State + recent chain
+// (the `party-check` move is the agent-driven version that interprets this)
+// ---------------------------------------------------------------------------
+
+const DEFAULT_PATHS = {
+  handoff: 'docs/agent-handoff.md',
+  currentState: 'docs/current-state.md',
+  nextTask: 'docs/next-task.md',
+  progressLog: 'docs/progress.md',
+  stateFile: 'baton-pass.state.json',
+}
+
+function readOrNull(p) {
+  try { return fs.readFileSync(p, 'utf8') } catch { return null }
+}
+
+function loadConfig(targetDir) {
+  const raw = readOrNull(path.join(targetDir, 'baton-pass.config.json'))
+  if (!raw) return { paths: { ...DEFAULT_PATHS }, fromConfig: false }
+  try {
+    const cfg = JSON.parse(raw)
+    return { paths: { ...DEFAULT_PATHS, ...(cfg.paths || {}) }, fromConfig: true }
+  } catch {
+    return { paths: { ...DEFAULT_PATHS }, fromConfig: false, configError: true }
+  }
+}
+
+function parseTurnState(md) {
+  if (!md) return null
+  const block = md.match(/##\s*Turn State\s*\n([\s\S]*?)(?:\n#{1,2}\s|$)/)
+  if (!block) return null
+  const field = (label) => {
+    // [ \t]* (not \s*) after the colon so the capture can't run onto the next line
+    const m = block[1].match(new RegExp(`^[-*][ \\t]*${label}[ \\t]*:[ \\t]*(.*)$`, 'm'))
+    return m ? m[1].trim() : ''
+  }
+  return {
+    state: field('State'),
+    lastMove: field('Last Move'),
+    lastAgent: field('Last Agent'),
+    nextAgent: field('Next Agent'),
+    updatedAt: field('Updated At'),
+  }
+}
+
+function parseRecentSessions(md, limit = 4) {
+  if (!md) return []
+  const chunks = md.split(/\n(?=###\s+Session\b)/).filter(c => /^###\s+Session\b/.test(c))
+  const field = (c, label) => {
+    const m = c.match(new RegExp(`^${label}[ \\t]*:[ \\t]*(.*)$`, 'm'))
+    return m ? m[1].trim() : ''
+  }
+  return chunks
+    .slice(-limit)
+    .map(c => ({
+      session: (c.match(/^###\s+(.*)$/m) || ['', ''])[1].trim(),
+      date: field(c, 'Date'),
+      agent: field(c, 'Agent'),
+      state: field(c, 'State'),
+      nextAgent: field(c, 'Next Agent'),
+      goal: field(c, 'Goal'),
+    }))
+    .filter(s => s.date || s.agent || s.goal) // drop empty template placeholders
+}
+
+function status(targetDir, asJson) {
+  const dir = path.resolve(targetDir)
+  const cfg = loadConfig(dir)
+  const stateRaw = readOrNull(path.join(dir, cfg.paths.stateFile))
+  const nextTaskMd = readOrNull(path.join(dir, cfg.paths.nextTask))
+  const progressMd = readOrNull(path.join(dir, cfg.paths.progressLog))
+
+  if (!cfg.fromConfig && !stateRaw && !nextTaskMd) {
+    console.error(`No Baton Pass setup found in ${dir}`)
+    console.error('Run:  npx baton-pass init')
+    process.exit(1)
+  }
+
+  let state = null
+  try { state = stateRaw ? JSON.parse(stateRaw) : null } catch { /* reported below */ }
+  const turn = parseTurnState(nextTaskMd)
+  const sessions = parseRecentSessions(progressMd)
+
+  if (asJson) {
+    console.log(JSON.stringify({ dir, stateFile: state, turnState: turn, recentSessions: sessions }, null, 2))
+    return
+  }
+
+  const line = (k, v) => console.log(`  ${(k + ':').padEnd(12)} ${v || '—'}`)
+  console.log('\nBaton Pass — status')
+  console.log('─'.repeat(40))
+  if (state) {
+    line('state', state.state)
+    line('last move', state.lastMove)
+    line('last agent', state.lastAgent)
+    line('next agent', state.nextAgent)
+    line('updated', state.updatedAt)
+    if (state.summary) line('summary', state.summary)
+  } else if (stateRaw) {
+    console.log('  baton-pass.state.json is present but not valid JSON')
+  } else {
+    console.log('  no baton-pass.state.json (using next-task.md only)')
+  }
+
+  if (turn && state) {
+    const disagree = ['state', 'lastMove', 'lastAgent', 'nextAgent'].filter((k) => {
+      const a = (state[k] || '').toLowerCase()
+      const b = (turn[k] || '').toLowerCase()
+      return a && b && a !== b
+    })
+    if (disagree.length) {
+      console.log(`\n  ! next-task.md Turn State disagrees on: ${disagree.join(', ')}`)
+      console.log('    next-task wins — reconcile baton-pass.state.json')
+    }
+  } else if (turn && !state) {
+    console.log('\n  Turn State (next-task.md):')
+    line('state', turn.state)
+    line('last move', turn.lastMove)
+    line('last agent', turn.lastAgent)
+    line('next agent', turn.nextAgent)
+  }
+
+  if (sessions.length) {
+    console.log('\nRecent chain (progress log)')
+    console.log('─'.repeat(40))
+    for (const s of sessions) {
+      const who = s.agent ? `${s.agent}${s.nextAgent ? ` -> ${s.nextAgent}` : ''}` : '—'
+      console.log(`  ${(s.session || 'Session').padEnd(14)} ${s.date || ''}  ${who}`)
+      if (s.goal) console.log(`  ${' '.repeat(14)} ${s.goal.slice(0, 64)}`)
+    }
+  }
+  console.log()
+}
+
+// ---------------------------------------------------------------------------
 // dispatch
 // ---------------------------------------------------------------------------
 
@@ -329,6 +467,9 @@ switch (cmd) {
     break
   case 'init':
     init(targetDir, force, trackState)
+    break
+  case 'status':
+    status(targetDir, rest.includes('--json'))
     break
   case 'commands':
     installCommands(targetDir, force)
