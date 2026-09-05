@@ -328,7 +328,7 @@ trusting state.
 | `claim` | Actor fence, `item_id`, `claim_id`, incremented `claim_generation`, **`claim_base_oid`** (§8.4), private `branch_ref`, entire effective write boundary, contract hashes, `lease_duration_ms`, `expires_at_advisory`, mode |
 | `lease-renew` | Refreshes `lease_duration_ms` and records the revision at renewal |
 | `scope-change` | Additions only, with current fence and prior effective-scope digest. Always a blocking CAS. Rejects overlap with any unordered item's reserved boundary, even unclaimed ones. Shrinking forbidden while work is unintegrated |
-| `contract-changed` | Atomically blocks the reporting claim and all active consumers. Cannot be acknowledged away; only a plan revision (§16) resolves it |
+| `contract-changed` | Opens the incident and atomically blocks the reporting claim and all active consumers, except an affected `integrating` claim follows the gate-preserving disposition in §8.6.2. Cannot be acknowledged away; only a plan revision (§16) resolves it |
 | `block` / `unblock` | Self-blocking latch (§13) and its reconciliation |
 | `done` | §8.3 |
 | `release` | Owner relinquishes an unfinished claim; scope freed |
@@ -448,9 +448,9 @@ live writers below `max_concurrent_writers`, or in degraded mode, **no other wri
 | `claimed`/`blocked`/`done` | `cancelled` | `cancel` | Owner abandons the item; boundary freed |
 | `claimed`/`blocked`/`done` | `todo` | `revoke` | **Human-authorized** removal of another registration's claim (§8.7); boundary freed |
 | `done` | `integrating` | `integration-started` | Acquires the singleton gate; mints `integration_attempt_id` |
-| `integrating` | `integrated` | `integrated` | Validator passed, merge landed; boundary released |
+| `integrating` | `integrated` | `integrated` | Exact attempt landed; boundary and gate released. An incident opened after integration started remains open (§8.6.2) |
 | `integrating` | `blocked` | `validation-failed` | Invariant violation; retained for diagnosis |
-| `integrating` | `done` | `integration-aborted` | Transient cause; candidate unchanged |
+| `integrating` | `done` / `blocked` | `integration-aborted` | Proven non-landing; gate released. Goes to `blocked` when an open incident affects the item, otherwise `done` (§8.6.2) |
 
 `cancelled` is terminal for that item unless a plan revision (§16) reintroduces it. `release` and
 `revoke` both return the item to `todo` and free the boundary; they differ only in who authorized
@@ -462,8 +462,9 @@ Additional determinations:
   itself; only a recorded reconciliation (`unblock`) does.
 - **`contract-changed`** opens the incident, **invalidates any `done` candidate** for an affected
   item, and blocks **every affected nonterminal claim** — the destination is **`blocked`**, never
-  `claimed`. An affected claim that is `integrating` must abort or complete recovery (§14.1) before
-  the incident can resolve; the incident cannot be acknowledged away (§16).
+  `claimed`. The sole status exception is an affected claim already `integrating`: it remains
+  `integrating` with its gate held while the incident is recorded, then follows §8.6.2. The
+  incident cannot be acknowledged away (§16).
 - **Candidate remediation** (§15.1) increments **exactly one** `candidate_generation`, publishes
   expected-absent, and records **which prior candidate it supersedes**.
 
@@ -495,6 +496,29 @@ real transition — or "succeed without state change", which that chain cannot r
 |---|---|---|
 | Already `integrated` by **this** `integration_attempt_id`, with matching merge, report, parents and tree | `AlreadyIntegrated` | **Benign** — the work landed; treat as success |
 | Already `integrated` by a **different** attempt | `IntegratedByOtherAttempt` | **Alarming** — invariant 4 (never merge twice); stop and escalate |
+
+#### 8.6.2 Contract incidents during integration
+
+`contract-changed` cannot move an affected `integrating` claim directly to `blocked`: doing so
+would strand the singleton gate because `integration-aborted` and `integrated` are legal only from
+`integrating`. It therefore records the open incident and invalidates the candidate for every
+**future** integration attempt, but leaves the current claim and item `integrating` and leaves the
+gate held. This is a real control transition, not a no-op; the incident record is authoritative.
+
+The held attempt then has exactly the ordinary deterministic recovery outcomes:
+
+- If the integration ref proves the attempt did **not** land, `integration-aborted` releases the
+  gate and moves the affected claim and item to **`blocked`**, not `done`. Its candidate remains
+  retained but invalidated by the incident.
+- If the exact attempt already landed with the required attempt, report, candidate, parents, and
+  tree identity, `integrated` finalizes it and releases the gate and reservation. The incident
+  remains open and continues to block every other affected nonterminal claim until plan revision.
+- If the outcome is uncertain, recovery holds the gate. It never guesses whether to block or
+  finalize.
+
+An in-flight validator that has not published the integration ref observes the changed control OID
+at §14 step 13 and takes the proven-non-landing abort path. A later attempt cannot reuse the
+invalidated candidate until the incident is resolved by plan revision.
 
 ### 8.7 Manual recovery
 
@@ -847,7 +871,7 @@ on hooks working. All reads use the adapter (§6.1).
 |---|---|---|
 | Race at steps 1–3, gate never acquired | none — nothing to release | Not held; retry from step 1 |
 | Invariant violation (steps 4–11) | `validation-failed`; claim → `blocked` | Released by that CAS |
-| Transient read/CAS race after acquisition, or stale integration head | **`integration-aborted`** | Released by that CAS; restart from step 1 |
+| Transient read/CAS race after acquisition, stale integration head, or changed control before the integration push | **`integration-aborted`** | Released by that CAS; claim → `blocked` if an open incident affects it, otherwise → `done` (§8.6.2); restart from step 1 only from `done` |
 | Failure after the step 13 push, outcome uncertain | Explicit recovery (§8.7) — inspect whether the attempt landed | **Held** |
 | Attempt landed but final CAS missing — **item is still `integrating`** | `integrated` completed by `integration_attempt_id`; the ordinary §8.6 rule applies, no special case | Released |
 | Replay against an item **already `integrated`** | **No event.** `Reject(AlreadyIntegrated)` if the attempt id matches, `Reject(IntegratedByOtherAttempt)` if it does not (§8.6.1) | Already released |
@@ -892,8 +916,9 @@ integrated items. Publish the new revision at `<prefix>e/<epoch_id>/plan/<n>` wi
 `plan_revision + 1`, new refs and OIDs, and a `supersedes` link. **All old claim and validator
 fences become invalid.** Release the gate only after the state transition; recovery is idempotent.
 
-A `contract-changed` incident blocks affected claims first and cannot be acknowledged away; this
-quiescent flow is the only way to adopt a changed contract.
+A `contract-changed` incident blocks affected claims first (or records the gate-preserving pending
+block for an already-`integrating` claim, §8.6.2) and cannot be acknowledged away; this quiescent
+flow is the only way to adopt a changed contract.
 
 ## 17. Board
 
