@@ -1,8 +1,15 @@
 # Baton Pass v1.0.0 — Pair Mode Coordination Design
 
-Status: architecture agreed by `claude@studio#1` and `codex@sol#1` after four adversarial review
-rounds; specification corrected after a strict artifact review (2026-09-04). Awaiting
-implementation planning.
+**Architecture: FROZEN** (2026-09-05).
+
+Agreed by `claude@studio#1` and `codex@sol#1` across four adversarial architecture rounds and three
+artifact-review rounds, plus one round of third-party feedback. Both agents have counter-signed this
+text with nothing outstanding.
+
+The architecture may be reopened **only** by failing implementation, model, or fault-injection
+evidence — not by further design review. Deferred until such evidence demands them: board polish,
+presence-GC ergonomics, machine-label UX, advanced inbox behaviour, and reconsideration of
+authoritative `lease-renew` or per-event nonce rotation.
 
 ## 1. Purpose
 
@@ -13,10 +20,28 @@ coordination.
 ### Goals
 
 - No two concurrent writers hold the same work item.
-- No two concurrent writers may write the same file without a blocking, explicit transition.
+- **Hard guarantees** (§1.1) — what the system actually enforces, as distinct from what it merely
+  makes unlikely.
 - A human sees live status without spending agent tokens.
 - Coordination costs an agent approximately nothing per turn.
 - The existing sequential Baton Pass workflow is unchanged.
+
+### 1.1 What is actually guaranteed
+
+The system does **not** guarantee that two writers can never touch the same file. Arbitrary shell
+commands and external editors can write anything before any guard observes it. Claiming otherwise
+would be false, and §13 already says the `PreToolUse` guard is an economic guardrail rather than a
+security boundary.
+
+The three hard guarantees are:
+
+1. **No two unordered claims are ever authorized with overlapping reserved boundaries.**
+2. **Every authoritative mutation must pass its current fences**, or the CAS rejects it.
+3. **No candidate integrates whose actual changed paths escape its effective boundary or violate
+   ownership or contracts.**
+
+Hooks prevent known structured writes and bound wasted work. They are a cost-reduction and
+early-warning mechanism, never the guarantee. The guarantee is the validator (§14).
 
 ### Non-goals for v1.0.0
 
@@ -203,8 +228,13 @@ integration worktree or ref plumbing.
 
 1. Reach quiescence — no active claims, no gates, nothing awaiting integration (as in §16).
 2. CAS an `epoch-closed` transition recording the final revision and integration head.
-3. Archive the chain at `<prefix>e/<epoch_id>/state-final`, then run `pair init` (§7) for the new
-   epoch, which pins the previous `epoch_id` as its predecessor.
+3. Publish the closed chain at `<prefix>e/<epoch_id>/state-final` with **expected-absent** CAS.
+4. The successor's `pair init` **CAS-replaces `<prefix>state`, using the closed epoch's final OID as
+   the expected old value**, with its own genesis commit.
+
+**`<prefix>state` is created expected-absent only by the first epoch.** Every successor replaces the
+closed active-state OID by CAS. Archiving alone would leave `<prefix>state` occupied and make
+successor initialization impossible, since §7 step 5 requires expected-absent.
 
 A closed epoch's immutable refs are retained under their own `epoch_id` namespace and never reused.
 A participant pinned to a closed epoch fails closed and reports the successor.
@@ -322,11 +352,22 @@ incarnation still carries the old generation and remains fenced, while the resum
 seamlessly. `claim_id`, `claim_generation`, `claim_base_oid`, and the effective boundary are
 unchanged; only the owner fence advances. Claims that were `blocked` stay `blocked`.
 
-#### 8.2.2 Preconditions and effects
+#### 8.2.2 Registration and session transitions
 
-Every event in the table above carries explicit preconditions and effects; §8.6 states them for item
-and claim transitions. An event name alone is not a specification, and an implementation must reject
-any event whose preconditions are unproven rather than assuming a default.
+Item and claim transitions are in §8.6. These govern registrations and are equally binding: an
+implementation must **reject** any event whose preconditions are unproven rather than assume a
+default.
+
+| Event | Preconditions | Effects |
+|---|---|---|
+| `register` | Epoch ready and open; **no existing binding** for `(platform_kind, platform_session_id)`; machine and path facts valid (§4.5, §9.1); machine label free or disambiguated | Creates generation 1 in **probing/degraded** with the first `next_pending_challenge`. **No write claim** until a proof-confirmation transition succeeds |
+| `reactivate` | Binding exists; **rejected while any owned claim is `integrating`** | Atomically advances the generation and rebinds owned non-integrating claims (§8.2.1). **Full** reactivation requires a valid fresh proof; **degraded** reactivation is permitted only while global writer exclusivity holds |
+| capability **downgrade** | None beyond the fence — it only removes authority | Sets the **local latch first** (§13), then records degraded. Permitted **without** a valid proof, since hooks may be broken |
+| capability **upgrade** | A fresh accepted proof (§12.2) | Records full mode. **Never implicit** |
+| `end-session` | **No owned nonterminal claim and no owned gate.** Otherwise `release`, `cancel`, or recovery must run first | Writes the tombstone; presence GC becomes permissible (§10.3) |
+
+Refusing `reactivate` during `integrating` is deliberate: advancing the generation mid-integration
+would invalidate the fence the in-flight attempt is running under.
 
 ### 8.3 `done` versus `integrated`
 
@@ -411,14 +452,34 @@ live writers below `max_concurrent_writers`, or in degraded mode, **no other wri
 `revoke` both return the item to `todo` and free the boundary; they differ only in who authorized
 it, which the event records.
 
+Additional determinations:
+
+- **`scope-change` while `blocked`** is permitted only as `blocked -> blocked`. It never unblocks by
+  itself; only a recorded reconciliation (`unblock`) does.
+- **`contract-changed`** opens the incident, **invalidates any `done` candidate** for an affected
+  item, and blocks **every affected nonterminal claim**. An affected claim that is `integrating`
+  must abort or complete recovery (§14.1) before the incident can resolve; the incident cannot be
+  acknowledged away (§16).
+- **Candidate remediation** (§15.1) increments **exactly one** `candidate_generation`, publishes
+  expected-absent, and records **which prior candidate it supersedes**.
+
 ### 8.7 Manual recovery
 
 Recovery is an **explicit, human-authorized, expected-OID CAS**. It never branches on advisory
 expiry — an expired lease is a display hint that invites a human decision, never authority.
 
-Recovering an integration attempt **must first inspect whether that attempt's branch push landed**
-(§14 step 13) before choosing `integrated` or `integration-aborted`. The CLI fails closed and
-prints the exact recovery command.
+**Integration recovery** inspects the integration ref and decides deterministically:
+
+- **Finalize** (`integrated`) **only when the exact attempt landed** — the integration head is a
+  merge commit carrying this `integration_attempt_id` and report identity, with the expected parents
+  and exactly `prospective_tree_oid`.
+- **Abort** (`integration-aborted`) **only when the integration ref proves it did not land.**
+- **Otherwise hold the gate** for human recovery. Uncertainty is never resolved by guessing.
+
+**Plan-gate recovery** follows the same shape: inspect the pinned proposal and the integration ref;
+finalize only an exactly-landed revision; abort only a provably non-landed attempt; otherwise hold.
+
+The CLI fails closed and prints the exact recovery command.
 
 ## 9. `plan.json`
 
@@ -612,20 +673,32 @@ plugin data. The registrar accepts only the fresh nonce it issued.
 peers. Therefore capability status is **materialized in `state.registrations`** (§8.1) by a
 nonce-rotation protocol:
 
-1. Registration issues an initial challenge nonce, recorded in control.
+Two **distinct** fields are materialized per registration:
+
+| Field | Meaning |
+|---|---|
+| `last_accepted_capability_proof` | The most recent proof control accepted: nonce, hook hash, generation |
+| `next_pending_challenge` | The challenge awaiting an answer |
+
+1. Registration records the first `next_pending_challenge` and starts the registration in
+   **probing/degraded**; no write claim is granted until a proof-confirmation transition succeeds.
 2. The hook writes the answering proof — nonce, event name, platform session id, hook hash, runtime
    version — into local plugin data.
-3. **Every control event that actor writes carries the proof for the outstanding challenge and
-   rotates a fresh challenge** for the next one. The CAS rejects an event whose proof is absent,
-   stale, or carries a changed hook hash.
+3. An actor control event **proves `next_pending_challenge`**. On that same CAS the proof becomes
+   `last_accepted_capability_proof` and a **new** `next_pending_challenge` is issued.
 
-Capability status is therefore refreshed by the actor's own control writes, and every peer reads it
-from the same authoritative chain.
+**Mode is evaluated from `last_accepted_capability_proof` plus generation plus hook hash — never
+from the pending challenge.** Issuing the next challenge must not instantly stale the accepted
+proof; a single field would make mode flap on every write.
 
-**Staleness is defined without a wall clock.** A proof is current when it answers the outstanding
-challenge for the **current `registration_generation`** with an unchanged hook hash. A session that
-performs a control transition without the corresponding proof is downgraded. Elapsed time is never
-the test. This is a cooperative protocol (§3): it detects broken or disabled hooks, not forgery.
+**Staleness is defined without a wall clock.** A proof is current when it is the last-accepted proof
+for the **current `registration_generation`** with an unchanged hook hash. Elapsed time is never the
+test.
+
+**Asymmetry by design:** a **downgrade may be recorded without a valid proof**, because it only
+removes authority and must remain possible when hooks are broken. An **upgrade always requires a
+fresh accepted proof**. This is a cooperative protocol (§3): it detects broken or disabled hooks,
+not forgery.
 
 ### 12.3 Modes
 
@@ -649,6 +722,10 @@ privately but cannot reach `done` or integration until control is reachable and 
 
 Prevention is **claim-time reservation of the whole static boundary**, not post-hoc observation.
 Observing touched paths detects a collision only after the writers have already edited.
+
+Consistent with §1.1: layers 1–3 below reduce cost and shorten detection time. **They never make an
+overlapping filesystem write impossible** — arbitrary shell and external editors are outside their
+reach. Only layer 4 is a guarantee.
 
 Layered response, weakest to strongest:
 
@@ -693,8 +770,9 @@ on hooks working. All reads use the adapter (§6.1).
    `plan_base_oid`, and static scope intersections. **Reject if a plan gate is active.**
 5. Verify the integrating registration and mode; the item's owner, `claim_id` and `claim_generation`;
    status `done`; unblocked; **generation not stale**; dependencies already `integrated`.
-6. Read the frozen result ref (§6.3) and require expected ancestry from `claim_base_oid`, the
-   declared commit range, and a clean worktree.
+6. Read the frozen candidate ref (§6.3) and require expected ancestry from `claim_base_oid` and the
+   declared commit range. **Cleanliness is not a property of the candidate** — it is a published,
+   immutable ref, not a worktree; see step 10.
 7. Compute changed paths from the authoritative range **with rename detection disabled**. Require
    every path inside effective scope and outside forbidden Baton/control paths. Compare to the
    `done` manifest and digest.
@@ -702,18 +780,28 @@ on hooks working. All reads use the adapter (§6.1).
    all affected items.
 9. Compare actual paths against already-integrated ownership manifests. Overlap is allowed only when
    the plan's dependency edges strictly order the items.
-10. Run configured `verify[].argv` **without a shell**; record exit code and output digest. Missing
-    tools and timeouts fail explicitly. No command is silently skipped.
-11. No-write merge analysis against the leased integration head. **Automatic validation fails on
-    every merge conflict** — see §15.1.
+10. **Construct the prospective merged tree** against the leased integration head, without writing
+    to any published ref. **Automatic validation fails on every merge conflict** (§15.1).
+    Materialize **that exact tree** in an **isolated, clean validation worktree** — cleanliness is
+    defined here and nowhere else — and record `prospective_tree_oid`.
+11. In that worktree, run configured `verify[].argv` **without a shell**, and re-check contracts as
+    applicable. Record exit codes and output digests. Missing tools and timeouts fail explicitly; no
+    command is silently skipped.
+
+    **Verification must run on the prospective merged tree, not on the candidate in isolation.**
+    A candidate can pass its own tests and still break once merged; validating the isolated
+    candidate would leave that case entirely untested.
 12. Build the **authoritative report**, bound to epoch, plan ref with commit and blob OIDs, control
-    revision, integration head, claim fence, result ref/OID/`candidate_generation`,
-    `integration_attempt_id`, path and contract digests, and verification results.
+    revision, integration head, claim fence, candidate ref/OID/`candidate_generation`,
+    `integration_attempt_id`, **`prospective_tree_oid`**, path and contract digests, and verification
+    results.
 13. Publish the report (step 12) at its epoch-namespaced ref with **expected-absent** CAS. Then
-    create the merge commit with the **leased integration head as first parent and the frozen
-    candidate head as second parent**, and **embed `integration_attempt_id` plus the report ref and
-    OID in the merge commit message** so a later process can prove which attempt landed. Verify the
-    tree, then publish the integration ref with expected-OID CAS.
+    create the merge commit **whose tree is exactly `prospective_tree_oid`** — the tree that was
+    verified, never a re-computed one — with the **leased integration head as first parent and the
+    frozen candidate head as second parent**, and **embed `integration_attempt_id` plus the report
+    ref and OID in the merge commit message** so a later process can prove which attempt landed.
+    **Re-check the gate and control facts immediately before** publishing the integration ref with
+    expected-OID CAS.
 14. CAS-write `integrated` with the merge OID, `integration_attempt_id`, and report ref/OID; release
     the item's reservation and the gate.
 
@@ -822,6 +910,9 @@ usage-aware auto-handoff.
 ## 20. Declared constraints
 
 - Cooperative threat model (§3).
+- **Guard layers are not guarantees.** Per §1.1, arbitrary shell or editor writes may occur before
+  detection; the enforced properties are boundary disjointness, fence validity, and the
+  integration-time path/ownership/contract check.
 - Manual recovery in v1: expired claims and gates are advisory fields, never automatic authority
   transfer. The CLI fails closed and prints a precise recovery command.
 - Restricted scope syntax reduces achievable concurrency in exchange for decidable intersection.
