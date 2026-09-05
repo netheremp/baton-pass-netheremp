@@ -189,6 +189,7 @@ never collide with, or resurrect, an earlier epoch's objects.
 | `<prefix>e/<epoch_id>/plan/<plan_revision>` | Immutable pinned plan revision |
 | `<prefix>e/<epoch_id>/result/<claim_id>/<candidate_generation>` | Immutable candidate (§6.3) |
 | `<prefix>e/<epoch_id>/report/<integration_attempt_id>` | Immutable authoritative report |
+| `<prefix>e/<epoch_id>/state-final` | Archived control chain of a closed epoch (§6.5) |
 | `<plan.integration_branch>` | Integration branch |
 
 ### 6.3 Object reachability
@@ -255,7 +256,8 @@ existing mismatched ref fails closed.**
    records a freshly minted `epoch_id`, any predecessor `epoch_id`, `coordination_backend_id`, ref
    prefix, `plan_revision = 1`, the pinned plan ref with its **commit and blob OIDs**, and the
    integration ref and OID.
-6. Mark the epoch ready by a subsequent CAS transition.
+6. CAS an **`epoch-ready`** transition. Readiness is a named control event, not an implicit state
+   (§8.2); nothing may register or claim before it.
 
 **Idempotent recovery.** A crash between steps leaves a partially initialized epoch. Re-running
 `pair init` **adopts and validates existing artifacts rather than reproducing them** — genesis
@@ -307,7 +309,7 @@ trusting state.
 
 | Collection | Contents |
 |---|---|
-| `epoch` | `epoch_id`, predecessor, `coordination_backend_id`, ref prefix, genesis OID, readiness, `max_concurrent_writers`, **`integration_head_oid`** (§8.4) |
+| `epoch` | `epoch_id`, predecessor, `coordination_backend_id`, ref prefix, genesis OID, **`status`: `initializing` \| `ready` \| `closed`**, `max_concurrent_writers`, **`integration_head_oid`** (§8.4) |
 | `plan` | `plan_revision`, pinned plan ref/OID, `plan_base_oid`, supersession chain |
 | `registrations` | binding, generation, machine, **materialized capability status and current nonce challenge** (§12.2), mode, status |
 | `machine_labels` | label → `machine_id` reservations |
@@ -338,6 +340,8 @@ trusting state.
 | `integration-aborted` | The attempt did not land; gate released |
 | `integrated` | Merge landed; records merge OID, `integration_attempt_id`, and authoritative report ref/OID; releases the item's reservation and the gate |
 | `plan-revision-started` / `plan-revised` | §16 |
+| `epoch-ready` | Marks the epoch open for registration and claims (§7 step 6). Required before any `register` |
+| `epoch-closed` | Closes the epoch at quiescence, recording the final revision and integration head (§6.5). No further transition is legal on a closed epoch |
 
 The item fencing token is `(epoch_id, item_id, claim_generation, claim_id)`.
 
