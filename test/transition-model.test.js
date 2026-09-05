@@ -212,6 +212,8 @@ function integratedFields(state, registrationId, itemId, claimId, attemptId) {
 }
 
 function landedFacts(state, fields) {
+  const claim = state.claims[fields.claimId]
+  const candidate = claim.candidates.find(entry => entry.ref === fields.candidateRef)
   return {
     integrationRefOid: fields.mergeOid,
     merge: {
@@ -233,6 +235,7 @@ function landedFacts(state, fields) {
       candidateGeneration: fields.candidateGeneration,
       integrationHeadOid: fields.firstParentOid,
       prospectiveTreeOid: fields.prospectiveTreeOid,
+      pathDigest: candidate.manifestDigest,
     },
   }
 }
@@ -544,6 +547,42 @@ test('candidate refs and generations are immutable and collision-safe', () => {
   rejected(collision, RejectReason.CANDIDATE_COLLISION)
 })
 
+test('done rejects changed paths outside scope and in forbidden control space', () => {
+  let state = registeredFull(['r1'])
+  state = claim(state, 'r1', 'alpha', 'claim-a')
+  const candidate = {
+    published: true,
+    expectedAbsent: true,
+    ref: 'refs/result/claim-a/1',
+    oid: 'candidate-a-1',
+    generation: 1,
+    ancestryValid: true,
+    manifestMatches: true,
+    contractsMatch: true,
+  }
+  const baseFields = claimFence(state, 'r1', 'alpha', 'claim-a', {
+    candidateGeneration: 1,
+    candidateRef: candidate.ref,
+    candidateOid: candidate.oid,
+    commitRange: ['head-0', candidate.oid],
+    manifestDigest: 'manifest-1',
+    contractHashes: { api: 'sha256:ok' },
+    preflightReportDigest: 'preflight-1',
+  })
+  const outside = transition(state, envelope(state, 'done', {
+    ...baseFields,
+    actualPaths: ['src/beta/stolen.js'],
+  }), facts(state, { candidate }))
+  rejected(outside, RejectReason.ACTUAL_PATH_OUTSIDE_BOUNDARY)
+
+  const forbidden = transition(state, envelope(state, 'done', {
+    ...baseFields,
+    eventId: oid('forbidden-event'),
+    actualPaths: ['.git/config'],
+  }), facts(state, { candidate }))
+  rejected(forbidden, RejectReason.FORBIDDEN_PATH)
+})
+
 test('candidate remediation increments exactly one generation and names its predecessor', () => {
   let state = registeredFull(['r1'])
   state = claim(state, 'r1', 'alpha', 'claim-a')
@@ -585,6 +624,19 @@ test('integration requires exact attempt, report, candidate, parents, and prospe
   rejected(replay, RejectReason.ALREADY_INTEGRATED)
   const other = transition(state, envelope(state, 'integrated', { ...fields, integrationAttemptId: 'attempt-b' }), facts(state, landedFacts(state, fields)))
   rejected(other, RejectReason.INTEGRATED_BY_OTHER_ATTEMPT)
+})
+
+test('integrated rechecks the frozen candidate paths rather than trusting done-time state', () => {
+  let state = registeredFull(['r1'])
+  state = claim(state, 'r1', 'alpha', 'claim-a')
+  state = done(state, 'r1', 'alpha', 'claim-a')
+  state = integrationStarted(state, 'r1', 'alpha', 'claim-a', 'attempt-a')
+  const fields = integratedFields(state, 'r1', 'alpha', 'claim-a', 'attempt-a')
+  const evidence = landedFacts(state, fields)
+  const corrupted = JSON.parse(JSON.stringify(state))
+  corrupted.claims['claim-a'].candidates[0].actualPaths = ['src/beta/stolen.js']
+  const result = transition(corrupted, envelope(corrupted, 'integrated', fields), facts(corrupted, evidence))
+  rejected(result, RejectReason.ACTUAL_PATH_OUTSIDE_BOUNDARY)
 })
 
 test('crash recovery finalizes an exact landed attempt once without a second merge', () => {
@@ -789,6 +841,17 @@ test('transitions are pure on success and rejection', () => {
   const rejectedResult = transition(state, envelope(state, 'capability-upgrade', { actor: actor(state, 'r1') }), facts(state))
   rejected(rejectedResult, RejectReason.FRESH_PROOF_REQUIRED)
   assert.equal(JSON.stringify(state), before)
+})
+
+test('prototype-named caller ids do not collide with map prototypes', () => {
+  let state = ready()
+  const result = transition(state, {
+    ...envelope(state, 'register', registrationEvent('__proto__', 'constructor')),
+    eventId: 'toString',
+  }, facts(state, { machineAndPathValid: true }))
+  assert.equal(result.ok, true, JSON.stringify(result.reject))
+  assert.equal(result.state.registrations.__proto__.id, '__proto__')
+  assert.equal(result.state.eventIds.toString.type, 'register')
 })
 
 test('boundary intersection uses segment-aware file/tree semantics', () => {
