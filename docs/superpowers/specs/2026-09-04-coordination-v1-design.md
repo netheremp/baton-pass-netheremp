@@ -439,7 +439,7 @@ live writers below `max_concurrent_writers`, or in degraded mode, **no other wri
 | `claimed` | `blocked` | `block` | Self-block latch, or a contract incident naming the item |
 | `blocked` | `claimed` | `unblock` | Reconciliation recorded; fence current |
 | `claimed` | `done` | `done` | Candidate published and frozen; **scope stays reserved** |
-| `done` | `claimed` | `block` | A contract incident invalidates the candidate |
+| `done` | `blocked` | `block` | A contract incident invalidates the candidate (§8.6.1) |
 | `claimed`/`blocked`/`done` | `todo` | `release` | Owner relinquishes; boundary freed; candidate retained then GC'd |
 | `claimed`/`blocked`/`done` | `cancelled` | `cancel` | Owner abandons the item; boundary freed |
 | `claimed`/`blocked`/`done` | `todo` | `revoke` | **Human-authorized** removal of another registration's claim (§8.7); boundary freed |
@@ -457,11 +457,40 @@ Additional determinations:
 - **`scope-change` while `blocked`** is permitted only as `blocked -> blocked`. It never unblocks by
   itself; only a recorded reconciliation (`unblock`) does.
 - **`contract-changed`** opens the incident, **invalidates any `done` candidate** for an affected
-  item, and blocks **every affected nonterminal claim**. An affected claim that is `integrating`
-  must abort or complete recovery (§14.1) before the incident can resolve; the incident cannot be
-  acknowledged away (§16).
+  item, and blocks **every affected nonterminal claim** — the destination is **`blocked`**, never
+  `claimed`. An affected claim that is `integrating` must abort or complete recovery (§14.1) before
+  the incident can resolve; the incident cannot be acknowledged away (§16).
 - **Candidate remediation** (§15.1) increments **exactly one** `candidate_generation`, publishes
   expected-absent, and records **which prior candidate it supersedes**.
+
+#### 8.6.1 Two determinations that were previously underdetermined
+
+Both were found by two independent readers of the frozen text before any implementation existed,
+and are recorded here with their reasoning so the resolution is not re-litigated.
+
+**A `done` claim hit by a contract incident goes to `blocked`, never `claimed`.**
+§8.2, §8.6, and §16 all say a contract incident *blocks* affected claims, and §16 states that only a
+plan revision can resolve one. `claimed` would falsely imply the owner may simply resume and produce
+a new candidate — but the contract hash it would have to match has not been re-agreed yet. The claim
+must wait for the plan revision, which is what `blocked` means. The superseded candidate is retained
+per §6.3 and a post-revision candidate uses a new `candidate_generation` (§15.1).
+
+**A duplicate `integrated` for an already-integrated attempt is `Reject(AlreadyIntegrated)`, not an
+idempotent success.**
+Only `integrating` → `integrated` is legal, and that rule is not special-cased. §14.1's idempotency
+row governs the case where the attempt landed but the **final CAS did not** — there the item is
+still `integrating`, so the ordinary rule already applies and recovery completes it.
+
+Accepting a replay against an item already `integrated` would have to either append a no-op control
+commit — bumping `revision` and polluting an append-only chain whose every entry is meant to be a
+real transition — or "succeed without state change", which that chain cannot represent.
+
+`Reject` therefore carries a **distinguished reason**, and the two cases must not be conflated:
+
+| Condition | Reason | Caller |
+|---|---|---|
+| Already `integrated` by **this** `integration_attempt_id`, with matching merge, report, parents and tree | `AlreadyIntegrated` | **Benign** — the work landed; treat as success |
+| Already `integrated` by a **different** attempt | `IntegratedByOtherAttempt` | **Alarming** — invariant 4 (never merge twice); stop and escalate |
 
 ### 8.7 Manual recovery
 
@@ -816,7 +845,8 @@ on hooks working. All reads use the adapter (§6.1).
 | Invariant violation (steps 4–11) | `validation-failed`; claim → `blocked` | Released by that CAS |
 | Transient read/CAS race after acquisition, or stale integration head | **`integration-aborted`** | Released by that CAS; restart from step 1 |
 | Failure after the step 13 push, outcome uncertain | Explicit recovery (§8.7) — inspect whether the attempt landed | **Held** |
-| Attempt landed but final CAS missing | `integrated` completed idempotently by `integration_attempt_id` | Released |
+| Attempt landed but final CAS missing — **item is still `integrating`** | `integrated` completed by `integration_attempt_id`; the ordinary §8.6 rule applies, no special case | Released |
+| Replay against an item **already `integrated`** | **No event.** `Reject(AlreadyIntegrated)` if the attempt id matches, `Reject(IntegratedByOtherAttempt)` if it does not (§8.6.1) | Already released |
 
 **Never merge twice.** Because the attempt id is inside the merge commit, recovery can prove
 whether the exact attempt landed rather than guessing.
