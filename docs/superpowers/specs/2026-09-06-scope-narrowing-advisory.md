@@ -448,6 +448,67 @@ Worth deciding whether v1.0.0 has anything to say about it, or whether observing
 
 ---
 
+## 9. Working notes, and where I am least confident
+
+### 9.1 Order matters more than the list suggests
+
+§6 is a set, not a sequence, and doing it in the wrong order causes rework:
+
+1. **The blocking L8–9 item first.** Until the spec stops forbidding its own revision, everything
+   after it is written against a document that disallows it.
+2. **Plan authorship next** (§4). It is the widest-blast-radius decision here: §7 init, §9 itself,
+   §16 revision, and `applyClaim`'s `ItemNotFound` path all change shape depending on the answer.
+   Deciding anything else first risks writing it twice.
+3. **Then the capability question** (§5, trap 2), because the concurrency knob it forces is an input
+   to how claims are admitted.
+4. **Everything else after**, in any order.
+
+Do not start implementing. This revision is a documentation task; Stage 3 begins once the spec is
+coherent again.
+
+### 9.2 When to stop and escalate
+
+This repo has an established practice of stop-condition findings rather than pushing through — see
+sessions 017 and 019 in `progress.md`. Apply it here. **Scope may be cut freely; an enforced
+invariant may not.** If a proposed change would weaken one of the three hard guarantees rather than
+merely remove a component, stop and write it up instead of resolving it yourself. Removing the
+presence plane is scope. Admitting claims during integration is a guarantee question, and §6's item
+about it should be treated accordingly.
+
+### 9.3 Definition of done for this revision
+
+Not "the product is designed" — that is unbounded. This revision is finished when:
+
+- the conflict inventory below is empty,
+- no section describes a removed component and no cross-reference points at one,
+- §4 and both traps in §5 have explicit written decisions with reasons,
+- the four owner escalations in `next-task.md` are written up well enough for a decision.
+
+### 9.4 The weakest argument in this document is mine
+
+§3 cuts the inbox on the grounds that the control plane is already the channel — claims are
+broadcast, and every event that matters between agents is already a control event. That reasoning is
+sound about *availability* and wrong about *latency*, and I underweighted the gap.
+
+Concretely. A opens a contract incident at T0. B's claim is invalidated in control state
+immediately — but B has no reason to read control mid-turn, and nothing pushes the fact to it. B
+keeps working through an entire autonomous turn and learns at `done`, which refuses with
+`IncidentStillOpen`. **Everything B did between T0 and T1 is wasted**, and §1.2 names exactly that as
+the primary defect class. The inbox existed to close this, and cutting it reopens it.
+
+I still do not think the answer is keeping the inbox — a second messaging plane is a per-turn context
+charge on every agent forever, for an event that is rare. The cheaper answer probably reuses
+something already being kept: **the enforcement hook runs on every tool call anyway.** A local
+invalidation flag it can check costs nothing per call and turns "discovered at `done`" into
+"discovered at the next edit." That is most of the inbox's value for none of its cost, and it needs
+no new plane.
+
+But I have not verified that, and it is the place where this advisory is most likely to be wrong.
+Treat §3's inbox row as the least settled line in the table, and if the cheap fix does not hold up,
+reopening the inbox is a legitimate outcome rather than a failure to follow this document.
+
+---
+
 ## Appendix — conflict inventory
 
 Every place the frozen spec contradicts this advisory, found by cross-reference audit on 2026-09-06.
