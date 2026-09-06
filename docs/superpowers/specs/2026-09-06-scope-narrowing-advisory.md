@@ -34,6 +34,43 @@ Three constraints follow, and they are the ones that should settle arguments:
 Compatibility with other environments is a **consequence** of portability, not a goal that competes
 with it. Nothing here should be designed around any particular product's existence.
 
+### 1.1 The design principle
+
+**Agent context is the scarce resource. Machine work is free. Every design choice moves work from
+context into code.**
+
+This is the founding purpose of the project, stated as an engineering rule rather than a slogan, and
+it settles more arguments than the three constraints do. Applied honestly it says:
+
+- **An agent must never read state in order to decide.** If an agent has to load control state to
+  learn what is free, coordination costs tokens on every turn — the exact thing this product exists
+  to remove. The CLI does the reading; the agent declares intent and is answered.
+- **A refusal must carry its remedy.** A refusal the agent has to investigate starts a research
+  loop. A refusal that names the holder and the alternatives ends in one line. Refusals are the main
+  event in this system, so this is the highest-leverage interface decision in it.
+- **Anything derivable is derived, not written.** If the control plane already knows a fact, no
+  agent should be spending context to restate it.
+- **A component that makes agents read more is not neutral.** It has a running token cost per turn,
+  charged forever. This is a second and stronger reason to cut the presence plane and the inbox:
+  they are not merely architecture we do not need, they are channels every agent would have to
+  consume on every turn.
+
+The split to hold in mind:
+
+```
+machine, free                              agent, expensive
+────────────────────────────────────────────────────────────
+hook denies an out-of-boundary edit        declares intent
+CLI reads control, computes overlap        accepts or adjusts
+CLI answers with remedy and free regions   supplies judgment and why
+validator proves paths, contracts, tree
+CLI emits the factual half of a handoff
+board renders for the human
+```
+
+Optimising this product means moving as much as possible to the left column. Where a feature cannot
+be moved left, it needs a strong reason to exist at all.
+
 ### Why the scope still narrows
 
 The frozen spec describes an environment: a control plane *and* a presence plane *and* an inbox *and*
@@ -112,6 +149,9 @@ This is worth stating positively rather than as a cut: **atomic claims over shar
 are the coordination mechanism.** That is what makes self-organising agents possible without a
 manager process, and it is why the inbox was never load-bearing.
 
+And per §1.1, both cuts pay twice. A plane an agent must consume is not free once it exists — it is
+a per-turn context charge levied forever. Removing them removes running cost, not just code.
+
 ---
 
 ## 4. The change that matters most: agents author the plan
@@ -152,19 +192,50 @@ exception. If self-planning is adopted without splitting these two paths, the sy
 full stop every time an agent thinks of something. Adding a disjoint item invalidates nothing and
 should not be priced like a contract change; resolve the two into separate events.
 
-**Trap 2 — the degraded-mode collapse.** Do not cut hooks while leaving the degraded-mode rule in
-place. Degraded mode grants at most one global claim, because without a trusted `PreToolUse` hook
-you cannot bound wasted work. But wasted work is a *cost*, not a *correctness* failure — the
-validator is what makes escapes unlandable. If hooks leave the critical path and every session
-therefore registers as degraded, the system silently collapses to a single writer and loses its
-reason to exist.
+**Trap 2 — the degraded-mode collapse.** *Owner decision, 2026-09-06: the enforcement hook stays.
+Reaching `integrate` having wasted hours of tokens is not an acceptable failure mode.* What follows
+records why that does not mean keeping §12 whole.
 
-The likely resolution is that the concurrency limit becomes an explicit **policy knob** rather than
-a consequence of capability, with hooks — if they survive at all — buying cheaper failure rather
-than admission. Note the honest trade: without hooks, conflicts surface at integration time instead
-of at edit time. Later, but still never wrong. For a zero-setup product that may be the right price.
+"Keeping hooks" bundles two things whose costs differ by an order of magnitude, and only the cheap
+one serves the goal:
 
-Confirm both before acting. Trap 2 is the single highest-risk decision in this advisory.
+| | What it is | New control events | New state | Serves token waste? |
+|---|---|---|---|---|
+| **Enforcement hook** (`PreToolUse`) | Reads the local claim boundary, denies out-of-boundary structured edits | **0** | **0** | **Yes, directly** |
+| **Capability probe** (§12.2) | Nonce-rotation protocol proving to *other machines* that your hooks run | 2 of 23 | 2 fields per registration, plus modes | **No** |
+
+The enforcement hook is nearly free because its path logic is already written and already verified:
+`pathWithinBoundary`, `forbiddenControlPath` and `normalizedRepoPath` landed with the invariant-3
+fix in `ff32590`. It touches no control state. **Keep it, and auto-install it at `init` wherever the
+harness allows, with no hash-review ceremony** — a hook the user must approve through a wizard
+violates constraint 2, and one that installs silently and degrades quietly does not.
+
+The capability probe does not save a single token. It answers "are that peer's hooks trustworthy",
+and its output is *admission control*: any unproven writer drops everyone to one claim. Follow the
+causation — if A's hooks break, A wanders out of scope, and **A's** work is refused at integration.
+B's boundary is still reserved and B's work still validates. The cost of broken hooks lands on the
+party whose hooks broke. The cross-registration proof protects against something else, and §3's
+cooperative threat model already says the target is broken or disabled hooks, not forgery.
+
+**So: keep the enforcement hook, cut the probe.** That is not a compromise, it is the correct
+decomposition — the half that saves tokens is already built, and the half that costs is the half
+that saves nothing.
+
+Cutting the probe *forces* the collapse question rather than merely risking it. Degraded mode grants
+at most one global claim because unproven hooks meant unbounded waste; with no probe, that judgment
+has no input. **The concurrency limit must become an explicit policy knob rather than a consequence
+of capability**, or the system silently collapses to a single writer and loses its reason to exist.
+
+With the hook kept, waste has three lines of defence, each catching what the previous missed:
+
+| Layer | Detects at | Cost |
+|---|---|---|
+| `PreToolUse` denial | the edit itself | reuses existing path logic |
+| CLI path check at `done` | end of turn | near zero, needs no hook |
+| Validator at `integrate` | last resort | already required |
+
+The middle layer is worth building regardless, because it is the one that still works when the hook
+could not be installed.
 
 ---
 
@@ -175,9 +246,30 @@ Confirm both before acting. Trap 2 is the single highest-risk decision in this a
 2. **Revise the spec** in place. The constraint is coherence, not ceremony: leave no section
    describing a component the revision removes, and no cross-reference pointing at one.
 3. **Resolve §4** — plan authorship — with an explicit written decision, and **§5**, both traps.
-4. **Propose the features that make v1.0.0 complete under this framing.** This advisory deliberately
-   does not enumerate them. A standalone zero-setup product has obligations the frozen spec never
-   considered, because that spec assumed a configured environment. Some prompts, not a checklist:
+4. **Apply §1.1 to the whole surface.** For every remaining component, ask what it costs an agent
+   per turn and whether the machine could carry it instead. Three candidates that fall out of the
+   principle and are not in the frozen spec at all:
+
+   - **Claim as a query, not just a mutation.** `claim --paths <p>` answers yes, or no plus who
+     holds it and which regions are free. The agent never reads control state to plan, because the
+     answer to "what can I take" is the return value of asking to take something. This is most of
+     what "agents divide work themselves" actually requires, and the CLI has already computed the
+     overlap — returning it is nearly free.
+   - **Machine-generated handoff facts.** Control state already knows what is claimed, by whom,
+     what integrated, what is blocked, and which incidents are open. That is most of
+     `current-state.md`. Emit it, and let the agent append only intent and judgment — the part no
+     machine can derive. This makes "write the delta, not the recap" structural rather than a rule
+     agents must remember, and it is where v1.0.0 pays back the v0.8.0 skill directly.
+   - **Refusal ergonomics as a first-class surface.** Every refusal names the holder, the conflict,
+     and the next legal action. Budget real design effort here; in a system whose main event is
+     refusal, this is the product's primary interface.
+
+   Weigh them and reject any that do not earn their place — the point of this advisory is narrowing.
+
+5. **Propose the features that make v1.0.0 complete under this framing.** This advisory deliberately
+   does not enumerate them beyond the above. A standalone zero-setup product has obligations the
+   frozen spec never considered, because that spec assumed a configured environment. Some prompts,
+   not a checklist:
    - What is the true first-run experience? How many commands from `npm i` to two agents working?
    - When the gate refuses, is the refusal legible enough for a human to act on without reading the
      spec? Refusals are the main interface of this product.
@@ -189,7 +281,7 @@ Confirm both before acting. Trap 2 is the single highest-risk decision in this a
 
    Bring back a proposed v1.0.0 scope list with reasons, not a wish list.
 
-5. **The staged plan after the cut:**
+6. **The staged plan after the cut:**
 
    ```
    Stage 3   canonical control commits, zero-setup init, manual recovery
