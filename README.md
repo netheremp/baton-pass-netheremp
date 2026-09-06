@@ -129,16 +129,20 @@ Commit first. If you cannot commit, name the uncommitted state in the baton.
 ### 🔮 `foresight`
 **Use when receiving a baton or returning after a pause.**
 
-Check before you touch anything:
+Check only the minimum delta needed to verify alignment and continue:
 ```
 → current user goal
 → working tree status
 → latest commit(s)
 → current-state
 → next-task
-→ latest progress entry
-→ files named in the baton
+→ latest relevant progress entry (only if needed)
+→ relevant portions of files named in the baton
 ```
+
+Deepen inspection only for detected drift, contradiction, or missing context. No routine
+full repo audit, full append-only history read, or full-spec reread. Prefer Git status/stat/path
+summaries, then targeted diffs; authoritative machine-side path/validator checks remain complete.
 
 Then:
 ```
@@ -190,7 +194,8 @@ What it produces:
 - open items that were never closed
 - verdict: `clean`, `gaps found`, `risks unresolved`, or `action required`
 
-**Do not run `hindsight` after every baton.** It is an audit, not a routine step.
+**Do not run `hindsight` routinely**, including automatically at milestones or when an agent joins.
+Full history belongs to this move, forensic investigation, severe drift, or an explicitly requested audit.
 
 ---
 

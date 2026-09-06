@@ -58,6 +58,14 @@ Default to delta, not recap.
 
 Do not restate stable project history unless the receiver cannot continue safely without it.
 
+Spend tokens on protocol/invariant reasoning where correctness requires it; eliminate repeated context ingestion, oversized diffs, redundant recaps, and unnecessary ceremony.
+
+- Read only the state needed to verify alignment and continue. Routine `foresight` must never become a full repo audit, full history read, or full-spec reread. Deepen inspection only for detected drift, contradiction, or missing context.
+- Use the latest relevant entry or a bounded excerpt of `progress.md` and other append-only history. Full history belongs to `hindsight`, forensic investigation, severe drift, or an explicitly requested audit.
+- Start Git inspection with concise status, stats, and paths; then inspect targeted diffs for relevant files/ranges. Avoid unrestricted `git diff` by default. This limits agent context ingestion, never authoritative machine-side path collection or validator checks.
+- Ordinary CLI/UI/docs/tests/mechanical changes use normal implementation and appropriate tests unless risk justifies escalation. Do not automatically require independent frontier-model review; reserve expensive independent/adversarial review for invariant-affecting work (CAS, fencing, state transitions, recovery, integration, ownership, validator logic, concurrency).
+- Preserve every protocol guarantee, required verification, and board/presence functionality and human-facing visibility.
+
 ## When To Use Each Move
 
 ### `new-game`
@@ -80,7 +88,7 @@ Use when:
 - another agent is taking over
 - you need a transferable continuity package
 
-`baton-pass` is a transfer checkpoint.
+`baton-pass` is a transfer checkpoint. Do not use it for tiny checkpoints.
 
 ### `foresight`
 
@@ -99,6 +107,7 @@ Use only when:
 
 Do not trigger `dragon-dance` by reflex.
 Do not include it in every session or `baton-pass` by default.
+Drift or omissions warrant it only when they reveal a reusable lesson.
 
 ### `party-check`
 
@@ -120,7 +129,7 @@ Use when:
 - a `foresight` found severe drift and you need to understand how far back it started
 - the project is being reviewed, handed to a human, or archived
 
-Do not run `hindsight` after every baton.
+Do not run `hindsight` routinely, including automatically at milestones or when an agent joins.
 It is an audit, not a routine checkpoint.
 
 ## What Each Move Should Write
@@ -215,8 +224,8 @@ Check only the minimum needed to avoid missteps:
 - latest commit(s)
 - `current-state`
 - `next-task`
-- latest `progress` entry
-- files named in the saved state or baton
+- latest relevant `progress` entry, only if needed beyond current state
+- relevant portions of files named in the saved state or baton
 - task list status if a plan was in progress
 
 Then decide:
@@ -311,4 +320,4 @@ Check turn ownership:
 
 Audit the full chain:
 - `hindsight`
-- if gaps or unresolved risks are found, run `dragon-dance`
+- if gaps or unresolved risks reveal a reusable lesson, run `dragon-dance`

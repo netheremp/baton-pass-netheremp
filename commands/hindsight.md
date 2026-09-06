@@ -15,7 +15,8 @@ Use this when:
 - a `foresight` found severe drift and you need to know how far back it started
 - the project is being reviewed, handed to a human, or archived
 
-Do not run this after every baton. It is an audit, not a routine step.
+Do not run this routinely, including automatically at milestones or when an agent joins.
+Use it for an actual audit need; routine resumes stay delta-only.
 
 Scope: $ARGUMENTS (default: full chain if not specified)
 
