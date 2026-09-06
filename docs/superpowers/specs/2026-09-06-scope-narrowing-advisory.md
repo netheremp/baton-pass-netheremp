@@ -77,7 +77,7 @@ mis-driven, or lied to; the work still cannot land.
 | §9 `plan.json` | **keep** | the boundary declaration; see the risk in §6 below |
 | §14 pre-integration validator | **keep — this is the product** | Stage 4, and the hardest work left |
 | §15 two-tier merge, §16 plan revision | **keep** | |
-| §17 board | **cut** | ship `status --json`; do not own the renderer |
+| §17 board | **cut** — but see the dissent | ship `status --json`; do not own the renderer. `2026-09-06-reviewer-notes-board-and-independence.md` argues the opposite case and should be read before deciding |
 | §10 presence plane | **cut** | advisory by construction; its main consumer was the board |
 | §11 inbox | **cut** | agent-to-agent messaging is Layer 3's job |
 | §12 hooks and capability probe | **demote to optional** | see the trap in §5 |
