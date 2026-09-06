@@ -130,7 +130,8 @@ bypassed, mis-driven, or lied to; the work still cannot land.
 | §17 board | **keep — required by Test B** | read-only, boring on purpose |
 | §10 presence plane | **cut** | replaced; see below |
 | §11 inbox | **cut** | replaced; see below |
-| §12 hooks and capability probe | **cut from the critical path** | pure setup burden; see §5 |
+| §12.1 enforcement hook (`PreToolUse`) | **keep** | owner decision; free, and it is the waste fence |
+| §12.2 capability probe, §12.3 modes | **cut** | costs two events and two fields, saves no tokens; see §5 |
 | §19 v1.1 scope | **cut entirely** | see §7 |
 
 **What replaces presence.** Nothing, and that is the point. The control chain already records who
@@ -326,3 +327,65 @@ rather than silent, which is the correct trade, and the board is where it become
 
 But it means quality of decomposition is a real product surface, not an agent's private business.
 Worth deciding whether v1.0.0 has anything to say about it, or whether observing it is enough.
+
+
+---
+
+## Appendix — conflict inventory
+
+Every place the frozen spec contradicts this advisory, found by cross-reference audit on 2026-09-06.
+This is a checklist for task 2, not additional argument. Line numbers are against
+`2026-09-04-coordination-v1-design.md` as of `a95e12d`.
+
+**The audit's headline: no cut here can break a guarantee, and the spec says so itself.** §2 states
+that no authoritative transition may branch on presence data or a wall clock, and §13 states that
+only layer 4 — the validator — is a guarantee. Presence and the inbox are therefore structurally
+incapable of being load-bearing for correctness. Removing them is a scope decision, never a safety
+one. Verify this claim rather than taking it from me; if it fails anywhere, that finding outranks
+this entire advisory.
+
+### Blocking — the spec forbids its own revision
+
+- **L8–9** — "The architecture may be reopened **only** by failing implementation, model, or
+  fault-injection evidence — not by further design review." The owner lifted the freeze on
+  2026-09-06. Left as-is, the spec forbids the revision you are making. Fix this first, and record
+  the owner's authority for the change.
+
+### Direct contradictions
+
+- **L543 (§9)** — "Committed by the human at `.baton-pass/plan.json` ... hand-editable, single source
+  of truth for the partition." Contradicts constraint 2 and §4 of this advisory. The sharpest single
+  conflict; resolving plan authorship rewrites this paragraph.
+- **L247 (§7 step 1)** — "Validate the plan (§9). Refuse to proceed on any validation error." Init
+  requires a plan to already exist, so first run cannot be zero-setup as written.
+- **L712–714 (§12.1)** — "Hooks are skipped until the user trusts the exact hash via `/hooks`.
+  Onboarding: install → review in `/hooks` → `pair doctor` → observe nonce proofs → register."
+  Conflicts with zero-setup twice: the review ceremony, and the nonce proofs that no longer exist.
+
+### Dangling references to cut components
+
+- **L145–150 (§5)** — the architecture diagram shows the presence plane and the inbox drain as core.
+- **L188 (§6.1)** — `<prefix>presence/<registration_id>` in the ref layout.
+- **L703, L705, L721 (§12.1–12.2)** — `UserPromptSubmit` inbox drain, `PostToolUse` presence refresh,
+  and the probe's presence publish/read. Note that `PostToolUse` **drift detection** survives the
+  presence cut and is worth keeping; only its presence half goes.
+- **L772 (§12.3)** — modes text depends on inbox protection and on the probe.
+- **L802 (§13)** — layer 3 is the inbox alert. Collision handling becomes layers 1, 2, 4; say so
+  explicitly rather than leaving a gap in the numbering.
+- **L925, L929 (§17)** — the board "renders control state plus presence" and does optional presence
+  GC. Both go, and the board improves: with presence cut it performs **no ref writes at all**, which
+  is a stronger and simpler statement of its read-only nature than the current text.
+- **L947 (§18)** — the K-generality argument cites per-registration presence refs.
+- **L960–961 (§19)** — the v1.0.0 scope list itself names leased advisory presence, the inbox, two
+  modes, and probes. Rewrite wholesale.
+
+### Consistent — no change needed, and worth knowing
+
+- **L17, L25 (§1 Goals)** — "a live human-facing board", "a human sees live status without spending
+  agent tokens", "coordination costs an agent approximately nothing per turn." **§1.1 of this
+  advisory is a restatement of the spec's own goals, not an import.** The token-economy principle
+  was always there; it simply was not applied as a design filter.
+- **L710 (§12.1)** — hooks inert outside an active epoch, so sequential Baton Pass is unchanged.
+  Keeping the enforcement hook preserves this property intact.
+- **L11–12** — the spec already defers "reconsideration of authoritative `lease-renew` or per-event
+  nonce rotation." Cutting the probe is a move the authors had already anticipated as plausible.
