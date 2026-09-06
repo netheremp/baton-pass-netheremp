@@ -108,6 +108,59 @@ Practical consequence for every decision below: **idle time on either agent is t
 class.** A design that is token-frugal but serialising is worse than one that spends slightly more
 tokens and keeps both agents working.
 
+### 1.3 Product shape — owner decision, 2026-09-06
+
+**One product, two features.**
+
+1. **Handoff (`baton-pass`, v0.8.0).** Stands alone. No installation required — it is a skill.
+   Works with one agent, one machine, no plan, no claims, no validator, no coordination substrate.
+   This is the on-ramp and by far the larger audience: anyone whose single agent runs out of context.
+2. **Pair Mode.** An optional add-on, adopted when a user has usage they cannot burn. Adds the
+   control plane, claims, the validator, and the board.
+
+These are not two products, because they are **two axes of one problem**:
+
+- **Handoff is vertical** — successive agents on one lane, across time.
+- **Pair Mode is horizontal** — concurrent lanes at one instant, kept disjoint.
+
+Parallelism does not remove handoff. It removes *idle* handoff. In Pair Mode each lane still has
+agents that exhaust their context and hand off to a successor; handoff is per-lane, coordination is
+cross-lane. A user needs both, which is why splitting them into separate products would sell one
+problem as two tickets.
+
+**The red line.** A user who wants only handoff must never be walked through Pair Mode's setup.
+After `npx baton-pass init`, handoff works with no plan, no claim, no validator, no coordination
+refs. Pair Mode is opened deliberately, later, by a user who has decided they want it. Breaking this
+punishes the large audience with the small audience's complexity, and it is the fastest way to lose
+what already works.
+
+**Naming is already consistent with §18**, which says the product may be called "pair mode" while no
+schema, adapter, or invariant may encode two. Pair Mode is therefore a *feature name*, not a second
+product name, and the existing rule protecting the model from the name still applies unchanged.
+
+**Versioning question withdrawn.** An earlier draft of this advisory worried that calling the
+coordination work "v1.0.0" implied a matured relay and would mislead upgraders. Under one product
+with two features that concern dissolves: the package gains a feature, and a version line running
+0.8.0 → 1.0.0 describes exactly that. No rename or separate version line is needed.
+
+### 1.4 The trigger has to be active
+
+One correction to the framing above, and it matters more than it looks.
+
+The owner describes Pair Mode as adopted "when the user notices they have usage they cannot burn."
+**Nobody notices that.** An unused rolling window is an invisible loss — you never feel the capacity
+you did not spend, you only feel the wall when you hit it. A product that waits for the user to
+notice will wait forever, and the on-ramp never gets used.
+
+So the handoff feature should say it. At the moment of a handoff, the tool already knows a handoff
+is happening and can know that the receiving side's window was fresh while the sender's was spent.
+One line at that exact moment — *these could have run in parallel; here is what that would have
+saved you* — converts an invisible loss into a visible one, at the only moment the user is
+receptive, and costs essentially nothing because the moment already exists in the workflow.
+
+This is the on-ramp between the two features, and it is worth designing deliberately rather than
+leaving to a line in the README.
+
 ### Why the scope still narrows
 
 The frozen spec describes an environment: a control plane *and* a presence plane *and* an inbox *and*
