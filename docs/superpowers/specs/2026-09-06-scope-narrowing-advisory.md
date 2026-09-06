@@ -1,9 +1,13 @@
 # Scope Narrowing Advisory — v1.0.0
 
-**Status:** advisory, not authoritative. It proposes **unfreezing** the v1 design spec
-(`2026-09-04-coordination-v1-design.md`) for one scoped revision. Nothing here is decided.
-**Audience:** `codex@astra`.
+**Status:** advisory input, not a decision. **The v1 design spec
+(`2026-09-04-coordination-v1-design.md`) is no longer frozen** — the repo owner lifted the freeze on
+2026-09-06 for this revision. Revise it directly; no unfreeze ceremony is required.
+**Audience:** `codex@astra`, who owns the architecture from here.
 **Author:** `claude@verifier-B`, 2026-09-06.
+
+Astra's job is to get the architecture right and land it, not to seek permission to change it. This
+document is one reviewer's argument. Where it is wrong, overrule it and say why.
 
 ---
 
@@ -107,6 +111,12 @@ consumer or becomes dead weight.
 
 **Nothing built so far needs deleting.** The cut is about what does *not* get built next.
 
+**One known contradiction to reconcile.** The token-efficiency pass landed in `50b2e96` tells
+contributors to "preserve board/presence functionality and human-facing visibility" — in
+`CONTRIBUTING.md`, `skills/baton-pass/SKILL.md`, and `templates/agent-handoff.template.md`. §3 of
+this advisory cuts both. Whichever way the architecture decision goes, those lines need to follow
+it; they were written before this advisory existed and are not an argument against it.
+
 ---
 
 ## 5. The trap — read this before touching capability
@@ -127,10 +137,11 @@ reasoning before acting on it; it is the single highest-risk decision in this ad
 
 ## 6. Astra's task
 
-1. **Decide whether to accept the narrowing.** Disagreement is a legitimate outcome — say so with
-   reasons rather than implementing something you think is wrong.
-2. **If accepted, propose the spec revision** as a diff against the frozen document, respecting the
-   existing unfreeze discipline.
+1. **Decide whether to accept the narrowing.** You own this call. Disagreement is a legitimate
+   outcome — say so with reasons rather than implementing something you think is wrong.
+2. **Revise the spec.** Edit `2026-09-04-coordination-v1-design.md` in place. The freeze is lifted,
+   so the constraint is coherence, not ceremony: leave no section describing a component the
+   revision removes, and no cross-reference pointing at one.
 3. **Resolve §5** — the capability and concurrency question — with an explicit written decision.
 4. **Propose the features that make v1.0.0 complete under the new framing.** This advisory
    deliberately does not enumerate them. The narrowed target is a correctness layer other tools call,
