@@ -1,200 +1,236 @@
-# Scope Narrowing Advisory — v1.0.0
+# Scope Advisory — v1.0.0
 
 **Status:** advisory input, not a decision. **The v1 design spec
 (`2026-09-04-coordination-v1-design.md`) is no longer frozen** — the repo owner lifted the freeze on
-2026-09-06 for this revision. Revise it directly; no unfreeze ceremony is required.
+2026-09-06. Revise it directly; no unfreeze ceremony is required.
 **Audience:** `codex@astra`, who owns the architecture from here.
-**Author:** `claude@verifier-B`, 2026-09-06.
+**Author:** `claude@verifier-B`. Revised 2026-09-06 after the owner corrected the product direction.
 
 Astra's job is to get the architecture right and land it, not to seek permission to change it. This
 document is one reviewer's argument. Where it is wrong, overrule it and say why.
 
----
-
-## 1. Why
-
-A competing product (Navide, MIT, open-sourced 2026-06-01) ships multi-agent **orchestration and
-observability** as a desktop environment: per-agent panes, per-pane logins, configurable pipelines
-with parallel slots, workspace-scoped history and handoffs, quota badges. Its own site places
-"intent-driven task and dependency orchestration" under *product direction*, not shipped, and lists
-"where are sessions overlapping" as an open question.
-
-Read that carefully, because it is the whole argument:
-
-- **It coordinates by orchestration and observation.** It makes work visible and directable.
-- **It does not enforce anything.** No boundary disjointness. No integration-time ownership check.
-
-Our three hard guarantees (§1.1) are exactly the thing it does not have and is not building. Our
-board, presence plane, and inbox are exactly the things it already does better, with a GUI, and
-which we would be rebuilding from zero.
-
-So: **stop building an environment. Build the guarantee.**
-
-> New target: *a host-agnostic, Git-ref-based correctness layer for multiple writers. Any
-> orchestrator can call it.*
-
-This is a narrowing, not a pivot. The control plane, the claims model, and the validator — the parts
-already built or next in line — are unchanged in purpose. What changes is that we stop surrounding
-them with a user interface.
+> **Revision note.** An earlier version of this advisory framed the product as a correctness layer
+> that orchestration UIs call, and cut the board on that basis. The owner has since stated the
+> direction below. That reframing invalidates part of the earlier argument; the board is restored
+> and the plan model changes. Where the old version survives, it is because the reasoning still
+> holds under the new framing, not because it was left unexamined.
 
 ---
 
-## 2. The layering, and the one acceptance test
+## 1. The product
+
+> **A standalone, lightweight tool that lets multiple coding agents plan their own work, divide it
+> among themselves, and run in parallel without conflicting.** It must be useful on its own, install
+> without ceremony, and plug into other CLIs and environments without depending on any of them.
+
+Three constraints follow, and they are the ones that should settle arguments:
+
+1. **Standalone.** Useful with nothing else installed. Not a plugin looking for a host.
+2. **Zero-setup.** No configuration ritual, no hook-hash review flow, no plan the user must author
+   before anything works. If a step exists only to satisfy the tool, it is a defect.
+3. **Portable.** Any OS, any agent CLI, any terminal. Git is the only substrate: no server, no
+   account, no daemon, no desktop app.
+
+Compatibility with other environments is a **consequence** of portability, not a goal that competes
+with it. Nothing here should be designed around any particular product's existence.
+
+### Why the scope still narrows
+
+The frozen spec describes an environment: a control plane *and* a presence plane *and* an inbox *and*
+hooks *and* a board *and* a validator. Under the three constraints above, most of that is either
+setup burden or a second channel for information the control plane already carries.
+
+What survives is the part nothing else provides: **parallel work that cannot silently conflict.**
+That is the product. Everything else has to justify itself against constraint 2.
+
+---
+
+## 2. The layering, and two acceptance tests
 
 ```
-Layer 3   Orchestrator UI (Navide / tmux / nothing)      optional
-Layer 2   baton-pass skill, the v0.8.0 move set          optional
-Layer 1   The gate: baton-pass CLI + git refs            AUTHORITATIVE
+Layer 3   Any orchestrator / IDE / nothing at all         optional
+Layer 2   baton-pass skill, the v0.8.0 move set           optional
+Layer 1   The gate: baton-pass CLI + git refs + viewer    THE PRODUCT
 ```
 
-**Layer 1 must hold with Layer 2 and Layer 3 absent.** That is the acceptance test for every design
-decision below. It follows directly from §1.1, which already says the `PreToolUse` guard is an
-economic guardrail and not a security boundary: a rule an agent can decline to follow is not a
-guarantee. If a property only holds when the agent runs the skill, it belongs in Layer 2 and must
-not be counted as enforced.
+**Test A — the guarantee stands alone.** Layer 1 must hold with Layer 2 and Layer 3 absent. This
+follows from §1.1, which already says the `PreToolUse` guard is an economic guardrail and not a
+security boundary: a rule an agent can decline to follow is not a guarantee. If a property only
+holds when the agent runs the skill, it belongs in Layer 2 and must not be counted as enforced.
 
-Concretely, Layer 1 is a CLI over the existing adapter:
+**Test B — the human stands alone.** `git clone`, install, two terminals, no desktop app, no
+orchestrator, no skill. Can a person see what the agents are doing, and act when the gate refuses?
+
+Test B is new in this revision and it is the one that restores the board. A correctness layer nobody
+can watch is hard to adopt and harder to trust, and "install someone else's app to see your own git
+refs" is not an answer a standalone product may give.
+
+Concretely, Layer 1 is:
 
 ```
 baton-pass claim     --item <id> --json
 baton-pass done      --item <id> --candidate <ref> --json
 baton-pass integrate --item <id> --json     # the validator runs here, and refuses
-baton-pass status    --json                 # data out; someone else renders it
+baton-pass status    --json                 # machine contract
+baton-pass board                            # the same data, for a human
 ```
 
-`integrate` is the only command that carries the product. Everything before it may be bypassed,
-mis-driven, or lied to; the work still cannot land.
+`integrate` carries the guarantee. `board` carries adoption. Everything before `integrate` may be
+bypassed, mis-driven, or lied to; the work still cannot land.
 
 ---
 
-## 3. Keep / cut, by spec section
+## 3. Keep / cut
 
 | Section | Disposition | Note |
 |---|---|---|
 | §6 backend adapter and ref layout | **keep** | Stage 2, already built |
-| §7 initialization and genesis | **keep** | Stage 3 |
+| §7 initialization | **keep, and make it zero-setup** | one command, sane defaults, no wizard |
 | §8 control plane, claims, fences, recovery | **keep** | Stage 1 model, already built |
-| §9 `plan.json` | **keep** | the boundary declaration; see the risk in §6 below |
-| §14 pre-integration validator | **keep — this is the product** | Stage 4, and the hardest work left |
-| §15 two-tier merge, §16 plan revision | **keep** | |
-| §17 board | **cut** — but see the dissent | ship `status --json`; do not own the renderer. `2026-09-06-reviewer-notes-board-and-independence.md` argues the opposite case and should be read before deciding |
-| §10 presence plane | **cut** | advisory by construction; its main consumer was the board |
-| §11 inbox | **cut** | agent-to-agent messaging is Layer 3's job |
-| §12 hooks and capability probe | **demote to optional** | see the trap in §5 |
+| §9 `plan.json` | **keep the boundaries, change the authorship** | see §4 — this is the big one |
+| §14 pre-integration validator | **keep — this is the guarantee** | Stage 4, hardest work left |
+| §15 two-tier merge, §16 plan revision | **keep, but §16 needs rework** | see the trap in §5 |
+| §17 board | **keep — required by Test B** | read-only, boring on purpose |
+| §10 presence plane | **cut** | replaced; see below |
+| §11 inbox | **cut** | replaced; see below |
+| §12 hooks and capability probe | **cut from the critical path** | pure setup burden; see §5 |
 | §19 v1.1 scope | **cut entirely** | see §7 |
 
-Cutting the board does not cost observability. We emit the data; an orchestrator draws the pixels.
+**What replaces presence.** Nothing, and that is the point. The control chain already records who
+did what and when, authoritatively. A board can render last-activity from control state without a
+second plane, a ref per registration, or polling. In v1.0.0 recovery is manual and leases are
+advisory, so a liveness indicator would be a guess rendered next to facts — inviting an operator to
+trust the guess. Showing only what the control plane knows is smaller *and* more honest.
+
+**What replaces the inbox.** The control plane is already the channel. Claims are broadcast by
+construction: agent B reads control state, sees `alpha` claimed, and takes `beta`. No message is
+sent because none is needed. Every event that actually matters between agents — a claim, a block, a
+contract incident, an integration — is *already* a control event. A separate messaging plane would
+be a second, weaker copy of a channel we are already obliged to make correct.
+
+This is worth stating positively rather than as a cut: **atomic claims over shared readable state
+are the coordination mechanism.** That is what makes self-organising agents possible without a
+manager process, and it is why the inbox was never load-bearing.
 
 ---
 
-## 4. What survives from Stage 1–2
+## 4. The change that matters most: agents author the plan
 
-**Survives unchanged.** `lib/pair/git-backend.js` in full — read, expected-OID CAS, listing, object
-access, backend selection. It is Layer 1 substrate and the cut does not touch it. **Its pending
-independent verification should still be completed**; that work is not wasted.
+The frozen spec assumes a `plan.json` written before work starts — a pinned ref, a DAG, boundaries
+declared up front (§9), consumed by static whole-boundary claims (§8.4). Under constraint 2 that is
+exactly the setup burden the product must not have, and under the product direction it is also the
+wrong shape: **agents are supposed to plan and divide the work themselves.**
 
-**Survives, with the capability machinery under review.** `lib/pair/transition-model.js`. The
-control chain, fences, claims, boundary disjointness, candidate lifecycle, integration gate,
-`candidatePathCheck` / `pathWithinBoundary` / `forbiddenControlPath` (the invariant-3 enforcement
-added in `ff32590`), and the §8.6.2 contract-incident rule all stay exactly as they are.
+The good news is that the enforcement model does not care who wrote the plan. It never trusted the
+plan's *wisdom* — only its *bindingness*. An agent that declares "I own `src/auth/`" is thereafter
+held to that declaration by the validator, whether a human or the agent itself wrote it down. A
+badly chosen boundary produces a refused integration, not a corrupted repository.
 
-Under review, because they exist mainly to support the hook trust model:
+So the boundaries stay; the authorship changes. Two shapes worth weighing:
 
-- `freshProof`, `nextPendingChallenge`, the nonce challenge chain
-- `capabilityCurrent`, `allWriterProofsCurrent`, capability generations
-- the `capability-upgrade` / `capability-downgrade` events
-- `mode: 'full' | 'degraded'` and its claim-admission consequences
+- **(a) Claim-creates-item.** No plan file up front. The first claim of an unknown item id creates
+  it with the declared boundary. The plan becomes an *output* of coordination rather than an input
+  to it. Maximum zero-setup; requires the model to admit items that do not yet exist, which it
+  currently rejects with `ItemNotFound`.
+- **(b) Agent-writable plan with a cheap append path.** Keep `plan.json`, let agents add items to it
+  through a lightweight control event that does not require the full §16 revision flow.
 
-**Under review for a different reason.** `lease-renew` exists to serve automatic takeover, which is
-a v1.1 feature this advisory proposes cutting. If v1.1 goes, decide whether the event keeps a
-consumer or becomes dead weight.
-
-**Nothing built so far needs deleting.** The cut is about what does *not* get built next.
-
-**One known contradiction to reconcile.** The token-efficiency pass landed in `50b2e96` tells
-contributors to "preserve board/presence functionality and human-facing visibility" — in
-`CONTRIBUTING.md`, `skills/baton-pass/SKILL.md`, and `templates/agent-handoff.template.md`. §3 of
-this advisory cuts both. Whichever way the architecture decision goes, those lines need to follow
-it; they were written before this advisory existed and are not an argument against it.
+Either way, **incremental discovery has to be first-class**. `scope-change` already exists for this
+and is well shaped for it: additions-only, blocking CAS, rejects overlap with any unordered item's
+reserved boundary. An agent that discovers it needs more ground widens its claim and is refused if
+that ground is spoken for. That is the self-organising loop, and it is already built.
 
 ---
 
-## 5. The trap — read this before touching capability
+## 5. Two traps
 
-Do **not** naively demote hooks while leaving the degraded-mode rule in place.
+**Trap 1 — plan revision quiescence versus self-planning.** §16 requires full quiescence and human
+authorization for a plan revision, and states that all old claim and validator fences become
+invalid. That is correct for a *contract change* and completely wrong for *an agent adding a new,
+disjoint work item mid-flight*, which under this product direction is the common case rather than an
+exception. If self-planning is adopted without splitting these two paths, the system will demand a
+full stop every time an agent thinks of something. Adding a disjoint item invalidates nothing and
+should not be priced like a contract change; resolve the two into separate events.
 
-Degraded mode grants at most one global claim. That restriction exists because without a trusted
-`PreToolUse` hook you cannot bound wasted work. But wasted work is a *cost*, not a *correctness*
-failure — the validator is what makes escapes unlandable. If hooks become optional and every session
-therefore registers as degraded, the system silently collapses to a single writer and the entire
-design loses its reason to exist.
+**Trap 2 — the degraded-mode collapse.** Do not cut hooks while leaving the degraded-mode rule in
+place. Degraded mode grants at most one global claim, because without a trusted `PreToolUse` hook
+you cannot bound wasted work. But wasted work is a *cost*, not a *correctness* failure — the
+validator is what makes escapes unlandable. If hooks leave the critical path and every session
+therefore registers as degraded, the system silently collapses to a single writer and loses its
+reason to exist.
 
 The likely resolution is that the concurrency limit becomes an explicit **policy knob** rather than
-a consequence of capability, with hooks buying cheaper failure rather than admission. Confirm this
-reasoning before acting on it; it is the single highest-risk decision in this advisory.
+a consequence of capability, with hooks — if they survive at all — buying cheaper failure rather
+than admission. Note the honest trade: without hooks, conflicts surface at integration time instead
+of at edit time. Later, but still never wrong. For a zero-setup product that may be the right price.
+
+Confirm both before acting. Trap 2 is the single highest-risk decision in this advisory.
 
 ---
 
 ## 6. Astra's task
 
-1. **Decide whether to accept the narrowing.** You own this call. Disagreement is a legitimate
+1. **Decide whether to accept this narrowing.** You own the call. Disagreement is a legitimate
    outcome — say so with reasons rather than implementing something you think is wrong.
-2. **Revise the spec.** Edit `2026-09-04-coordination-v1-design.md` in place. The freeze is lifted,
-   so the constraint is coherence, not ceremony: leave no section describing a component the
-   revision removes, and no cross-reference pointing at one.
-3. **Resolve §5** — the capability and concurrency question — with an explicit written decision.
-4. **Propose the features that make v1.0.0 complete under the new framing.** This advisory
-   deliberately does not enumerate them. The narrowed target is a correctness layer other tools call,
-   which is a different product from the one the frozen spec describes, and a correctness layer has
-   obligations an environment does not. Some prompts, not a checklist:
-   - What does an orchestrator need in order to trust us — a stable machine contract, exit codes,
-     versioning, a schema?
-   - What does an operator do when the gate refuses? Is a refusal legible enough to act on?
-   - Manual recovery (§8.7) was designed with a board present. What replaces the board there?
-   - Can a second implementation be written against our spec, or is the format underdetermined?
-   - What proves to a stranger that the guarantee holds — and can they run that proof themselves?
+2. **Revise the spec** in place. The constraint is coherence, not ceremony: leave no section
+   describing a component the revision removes, and no cross-reference pointing at one.
+3. **Resolve §4** — plan authorship — with an explicit written decision, and **§5**, both traps.
+4. **Propose the features that make v1.0.0 complete under this framing.** This advisory deliberately
+   does not enumerate them. A standalone zero-setup product has obligations the frozen spec never
+   considered, because that spec assumed a configured environment. Some prompts, not a checklist:
+   - What is the true first-run experience? How many commands from `npm i` to two agents working?
+   - When the gate refuses, is the refusal legible enough for a human to act on without reading the
+     spec? Refusals are the main interface of this product.
+   - §8.7 manual recovery was designed with a board present. What exactly does the operator see and
+     type? This is now the only recovery path, since v1.1 auto-takeover is cut.
+   - How does an agent *discover* the protocol? A CLI with `--json` is not self-documenting.
+   - Can a second implementation be written from the spec, or is the format underdetermined?
+   - What proves the guarantee to a stranger, and can they run that proof themselves?
 
    Bring back a proposed v1.0.0 scope list with reasons, not a wish list.
 
-5. **The staged plan after the cut**, for reference:
+5. **The staged plan after the cut:**
 
    ```
-   Stage 3   canonical control commits, idempotent init and recovery
-   Stage 4   the validator (§14)          <- the differentiator; hardest remaining work
-   Stage 5   CLI surface and the JSON contract
+   Stage 3   canonical control commits, zero-setup init, manual recovery
+   Stage 4   the validator (§14)          <- the guarantee; hardest remaining work
+   Stage 5   CLI surface, JSON contract, and the board on top of it
    ```
 
-   Board, presence, inbox, and hook stages cease to exist. Roughly half the remaining work, with the
-   differentiator moved earlier: after Stage 4 there is something demonstrable.
+   Presence, inbox, and hook stages cease to exist. Roughly half the remaining work, with the
+   differentiator moved earlier: after Stage 4 there is something demonstrable, and after Stage 5 it
+   is watchable.
 
 ---
 
 ## 7. Out of scope, deliberately
 
 **All of v1.1** — automatic takeover, third-party quarantine, rename metadata, Cloudflare transport,
-usage-aware auto-handoff. Usage awareness is already commodity in orchestrator UIs; transport work
-is a separate infrastructure project; takeover depends on a trustworthy time source (§8.5) that does
-not exist. None of it earns its cost.
+usage-aware auto-handoff. Two are worth naming specifically under the new framing: **Cloudflare
+transport contradicts constraint 3** — a server dependency in a product whose portability comes from
+having no infrastructure. Whatever git remote the user already has *is* the transport, and
+`git-backend.js` already treats it that way. **Auto-takeover** still depends on a trustworthy time
+source (§8.5) that does not exist; manual recovery plus a visible board is the coherent v1.0.0
+answer, which is another reason Test B matters.
 
-**A Navide adapter.** Integrate *with*, never *into*. Merging into a macOS-and-Apple-Silicon
-Electron app forfeits host-agnosticism, which is the only advantage we hold, and makes us a line item
-on someone else's roadmap. That project is also early — small contributor base, first-party
-dogfooding only by its own admission, and currently carrying bugs that make it unusable (reported
-upstream by the maintainer of this repo, who rates it promising). It may well succeed. Betting on it
-is still the wrong shape of bet.
-
-Keep the JSON contract generic enough that *any* orchestrator can drive it, and let adapters be
-somebody's afternoon rather than our roadmap.
+**Designing around any specific environment.** Integrate with, never into. Other tools are test
+cases for portability, not design inputs. If a decision only makes sense assuming a particular
+product exists, adopts us, and survives, the design is coupled to something we do not control.
+Keep the JSON contract generic enough that anything can drive it, and let adapters be somebody's
+afternoon rather than our roadmap.
 
 ---
 
 ## 8. The risk this does not solve
 
-The validator needs `plan.json`, and a human has to declare the boundaries in it. **That is the
-adoption ceiling for this entire design**: it only pays off where someone is willing to state
-boundaries up front.
+Under human-authored plans the ceiling was adoption: someone had to declare boundaries up front.
+Agent-authored planning removes that ceiling and replaces it with a different one: **agents have to
+divide the work well enough for parallelism to actually pay.**
 
-We cannot engineer that away. But it is worth noticing that an orchestrator's pipeline
-configuration — stages, parallel slots, roles — is the most natural place for that declaration to
-already exist. Which is the second argument for integrating rather than merging: let the orchestrator
-get the boundaries written; we make them binding.
+The system guarantees that a bad division cannot corrupt the repository. It does not guarantee that
+a bad division is *productive* — two agents can decompose work so badly that they serialize on
+overlapping ground, each refused in turn, and the parallelism evaporates. That failure is visible
+rather than silent, which is the correct trade, and the board is where it becomes visible.
+
+But it means quality of decomposition is a real product surface, not an agent's private business.
+Worth deciding whether v1.0.0 has anything to say about it, or whether observing it is enough.

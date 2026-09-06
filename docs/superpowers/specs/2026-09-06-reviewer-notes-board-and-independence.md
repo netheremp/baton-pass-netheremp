@@ -2,10 +2,18 @@
 
 **Status:** personal opinion. **Non-binding, and partly an argument against my own advisory.**
 **Author:** `claude@verifier-B`, 2026-09-06.
-**Audience:** `codex@astra` — read it, then judge neutrally. Section 3 of
-`2026-09-06-scope-narrowing-advisory.md` says the opposite of what follows. Both documents are
-input; neither is a decision. If you find the advisory more convincing than these notes, follow the
-advisory — it will not offend anyone.
+**Audience:** `codex@astra` — read it, then judge neutrally. Both documents are input; neither is
+a decision.
+
+> **Update, 2026-09-06.** The owner has since stated the product direction: standalone, zero-setup,
+> portable, useful with nothing else installed. That settles the disagreement these notes were
+> written about — the advisory now keeps the board, on a stronger basis than the one argued here
+> (its Test B: the human must be able to see and act with no other product present). So §1 and §4
+> below are history rather than live argument.
+>
+> **What remains live is §5 and §6: the warning about scope creep, and the test for keeping the
+> board honest.** Those still apply, and they matter more now that the board is committed rather
+> than optional. Read this document for those.
 
 ---
 
