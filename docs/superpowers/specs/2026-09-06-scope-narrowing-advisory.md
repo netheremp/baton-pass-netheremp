@@ -71,6 +71,43 @@ board renders for the human
 Optimising this product means moving as much as possible to the left column. Where a feature cannot
 be moved left, it needs a strong reason to exist at all.
 
+### 1.2 Where this came from, and what is actually scarce
+
+The owner's account of why the project exists, recorded because it should outrank any inference
+drawn from the code:
+
+> Before v0.8.0, no handoff could preserve correctness while avoiding unnecessary token burn — the
+> failure mode was drowning the next agent in git diffs. That is what v0.8.0 set out to fix.
+>
+> But in use, a pattern showed up: *"I am always waiting for one side to finish before handing off
+> to the other."* Tokens are saved, yet neither agent gets near its 5-hour limit. The saving is
+> hollow. And the intended user is not someone who can shrug and buy a 20x plan or burn API credit —
+> though even they should care, because ten percent of $20 is $2, but ten percent of $100K is
+> $10,000.
+
+Take that second paragraph seriously, because it reframes what this product optimises.
+
+**For a flat-rate subscription, tokens saved have no cash value. Only capacity freed does.** The
+scarce resource is the *rolling usage window*, and an unused window does not roll over — it is gone.
+So there are two different optimisations, and only one of them has been built:
+
+- **Token efficiency** — fewer tokens per unit of work. v0.8.0 does this. It pushes back the moment
+  you hit the wall.
+- **Capacity utilisation** — using the windows you have *already paid for*, in parallel. Nothing
+  built so far does this, and it is worth strictly more.
+
+Two agents run serially: you use roughly half of the combined capacity you are paying for, forever.
+Run them in parallel and throughput doubles at zero additional cost. **That is the product.** The
+correctness layer is not the point — it is what makes the parallelism safe enough to attempt.
+
+**The metaphor encodes the limitation.** A baton is *passed*; only one runner runs. The owner's
+frustration is the design working exactly as named. v1.0.0 is therefore not an evolution of
+baton-pass — it is a different sport, and the move set will need to say so.
+
+Practical consequence for every decision below: **idle time on either agent is the primary defect
+class.** A design that is token-frugal but serialising is worse than one that spends slightly more
+tokens and keeps both agents working.
+
 ### Why the scope still narrows
 
 The frozen spec describes an environment: a control plane *and* a presence plane *and* an inbox *and*
@@ -264,8 +301,35 @@ could not be installed.
    - **Refusal ergonomics as a first-class surface.** Every refusal names the holder, the conflict,
      and the next legal action. Budget real design effort here; in a system whose main event is
      refusal, this is the product's primary interface.
+   - **`foresight` becomes a machine check.** Today it is an agent reading documents and hoping they
+     match reality — it costs tokens every resume and detects drift only if the reader notices. With
+     authoritative control state, alignment is a diff between the written state and the control
+     chain, and drift becomes mechanically detectable. This is the cheapest correctness upgrade
+     available to the existing product, and it removes a recurring per-resume token charge.
 
    Weigh them and reject any that do not earn their place — the point of this advisory is narrowing.
+
+   **And one finding to resolve, which §1.2 makes urgent (§8.4 rule 2, model `applyClaim`):**
+
+   > `if (state.integrationGate) return reject(INTEGRATION_GATE_HELD)`
+
+   While any item is integrating, **no agent may claim any item, however disjoint.** The spec
+   justifies this as "integration is bounded and rare, so the cost is small and the guarantee is
+   exact." Rare it is not: integration runs the validator, including `verify[].argv` — the build and
+   test commands — which is the *longest* operation in the system. And the finer the decomposition,
+   the better the parallelism but the more often this global stall fires. The design's throughput
+   works against its own parallelism.
+
+   It is not a correctness bug; the conservative rule buys an exact guarantee. But it is priced
+   against an assumption that does not hold for the actual user, so decide deliberately rather than
+   inheriting it. The question to answer: a new claim reserves boundary and writes no tree, so does
+   admitting one whose boundary is disjoint from the integrating item actually invalidate anything
+   the validator read? If not, the rule can narrow from "no claims" to "no overlapping claims" and
+   the stall mostly disappears. Verify rather than assume — the TOCTOU argument in §8.4 is subtle and
+   was written by people who had thought about it.
+
+   Worth noting what is *already* fine: the writer limit counts distinct registrations, not claims,
+   so one agent may hold several claims at once and need not idle while one of them integrates.
 
 5. **Propose the features that make v1.0.0 complete under this framing.** This advisory deliberately
    does not enumerate them beyond the above. A standalone zero-setup product has obligations the
